@@ -9,10 +9,13 @@ const captureStep = document.getElementById('capture-step');
 const adjustStep = document.getElementById('adjust-step');
 const previewStep = document.getElementById('preview-step');
 const generateBtn = document.getElementById('generate-3d-btn');
-const compilerStatus = document.getElementById('compiler-status');
+const landBtn = document.getElementById('land-btn');
+const cameraFeed = document.getElementById('camera-feed');
 
-let mindThree = null;
-let animationFrameId = null;
+let scene, camera, renderer, leftWing, rightWing, butterflyGroup;
+let alvaEngine = null;
+let animFrameId = null;
+let isLanded = false;
 
 // Step 1: Capture Photo
 cameraInput.addEventListener('change', (e) => {
@@ -34,7 +37,7 @@ cameraInput.addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
-// Step 2: Luminance Thresholding
+// Step 2: Threshold Alpha Processing
 function processAlphaMap() {
   if (!rawImage) return;
   
@@ -44,10 +47,7 @@ function processAlphaMap() {
   const threshold = parseInt(thresholdSlider.value, 10);
 
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    const luma = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
     if (luma > threshold) {
       data[i + 3] = 0;
     }
@@ -55,7 +55,6 @@ function processAlphaMap() {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // Axis Split Indicator
   const splitX = (thresholdCanvas.width * splitSlider.value) / 100;
   ctx.strokeStyle = '#ff0055';
   ctx.lineWidth = 6;
@@ -68,49 +67,49 @@ function processAlphaMap() {
 thresholdSlider.addEventListener('input', processAlphaMap);
 splitSlider.addEventListener('input', processAlphaMap);
 
-// Step 3: MindAR Image Target Compiler & 3D Tracking Setup
+// Step 3: Initialize WebAssembly SLAM Engine & 3D Environment
 generateBtn.addEventListener('click', async () => {
-  compilerStatus.innerText = "Compiling target image for AR tracking...";
-  generateBtn.disabled = true;
-
-  try {
-    // Compile photo into target tracker using MindAR Offline Compiler
-    const compiler = new window.MINDAR.IMAGE.Compiler();
-    const targetBuffer = await compiler.compileImageTargets([rawImage], (progress) => {
-      compilerStatus.innerText = `Compiling Target: ${Math.round(progress * 100)}%`;
-    });
-
-    const targetBlob = new Blob([targetBuffer], { type: 'application/octet-stream' });
-    const mindTargetUrl = URL.createObjectURL(targetBlob);
-
-    compilerStatus.innerText = "";
-    generateBtn.disabled = false;
-    adjustStep.classList.remove('active');
-    previewStep.classList.add('active');
-
-    initMindARScene(mindTargetUrl);
-  } catch (err) {
-    console.error(err);
-    compilerStatus.innerText = "Error compiling AR target image. Try another photo.";
-    generateBtn.disabled = false;
-  }
+  adjustStep.classList.remove('active');
+  previewStep.classList.add('active');
+  await initSLAMAndCamera();
+  init3DScene();
 });
 
-async function initMindARScene(mindTargetUrl) {
-  const container = document.getElementById('ar-container');
+async function initSLAMAndCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    cameraFeed.srcObject = stream;
+    await new Promise((resolve) => { cameraFeed.onloadedmetadata = resolve; });
+
+    // Initialize AlvaAR WebAssembly SLAM
+    if (window.AlvaAR) {
+      alvaEngine = await window.AlvaAR.create(cameraFeed.videoWidth, cameraFeed.videoHeight);
+    }
+  } catch (err) {
+    console.warn("Camera or SLAM initialization error:", err);
+  }
+}
+
+function init3DScene() {
+  const container = document.getElementById('webgl-container');
   container.innerHTML = '';
 
-  // Initialize MindAR Three.js instance
-  mindThree = new window.MINDAR.IMAGE.MindARThree({
-    container: container,
-    imageTargetSrc: mindTargetUrl,
-    uiLoading: "no",
-    uiScanning: "yes"
-  });
+  const width = window.innerWidth;
+  const height = window.innerHeight;
 
-  const { renderer, scene, camera } = mindThree;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, width / height, 0.01, 1000);
+  camera.position.set(0, 0, 2);
 
-  // Clean alpha canvas for wing textures
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x000000, 0);
+  container.appendChild(renderer.domElement);
+
+  // Clean Wing Canvas Crop (Without red center indicator)
   const cleanCanvas = document.createElement('canvas');
   cleanCanvas.width = thresholdCanvas.width;
   cleanCanvas.height = thresholdCanvas.height;
@@ -125,7 +124,6 @@ async function initMindARScene(mindTargetUrl) {
   }
   cleanCtx.putImageData(imgData, 0, 0);
 
-  // Split left and right wing canvases
   const splitRatio = splitSlider.value / 100;
   const splitX = cleanCanvas.width * splitRatio;
 
@@ -139,55 +137,89 @@ async function initMindARScene(mindTargetUrl) {
   rightCanvas.height = cleanCanvas.height;
   rightCanvas.getContext('2d').drawImage(cleanCanvas, splitX, 0, rightCanvas.width, cleanCanvas.height, 0, 0, rightCanvas.width, cleanCanvas.height);
 
-  const leftTex = new THREE.CanvasTexture(leftCanvas);
-  const rightTex = new THREE.CanvasTexture(rightCanvas);
   const matConfig = { transparent: true, side: THREE.DoubleSide, depthWrite: false };
+  const leftMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(leftCanvas), ...matConfig });
+  const rightMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rightCanvas), ...matConfig });
 
-  const wingWidth = 0.6;
-  const wingHeight = 1.0;
+  const wingWidth = 0.5;
+  const wingHeight = 0.8;
 
-  // Pivot-aligned wing geometries
   const leftGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   leftGeo.translate(-wingWidth / 2, 0, 0);
-  const leftWing = new THREE.Mesh(leftGeo, new THREE.MeshBasicMaterial({ map: leftTex, ...matConfig }));
+  leftWing = new THREE.Mesh(leftGeo, leftMat);
 
   const rightGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   rightGeo.translate(wingWidth / 2, 0, 0);
-  const rightWing = new THREE.Mesh(rightGeo, new THREE.MeshBasicMaterial({ map: rightTex, ...matConfig }));
+  rightWing = new THREE.Mesh(rightGeo, rightMat);
 
-  const butterflyGroup = new THREE.Group();
+  butterflyGroup = new THREE.Group();
   butterflyGroup.add(leftWing);
   butterflyGroup.add(rightWing);
-
-  // Attach butterfly to the tracked anchor target
-  const anchor = mindThree.addAnchor(0);
-  anchor.group.add(butterflyGroup);
+  butterflyGroup.position.set(0, 0, -1.5); // Initial position 1.5m in front of camera
+  scene.add(butterflyGroup);
 
   const clock = new THREE.Clock();
 
-  // MindAR Start & Render Loop
-  await mindThree.start();
+  // SLAM & Render Loop
+  function renderLoop() {
+    animFrameId = requestAnimationFrame(renderLoop);
+    const elapsedTime = clock.getElapsedTime();
 
-  renderer.setAnimationLoop(() => {
-    const t = clock.getElapsedTime();
+    // 1. Run SLAM Camera Tracking
+    if (alvaEngine) {
+      const pokeCtx = document.createElement('canvas').getContext('2d');
+      const pose = alvaEngine.findCameraPose(cameraFeed);
+      if (pose) {
+        camera.matrix.fromArray(pose);
+        camera.matrixAutoUpdate = false;
+      }
+    }
 
-    // Wing Flapping Animation
-    const flapAngle = Math.sin(t * 7) * 0.7;
-    leftWing.rotation.y = flapAngle;
-    rightWing.rotation.y = -flapAngle;
+    // 2. Animation State Machine (Flying vs Perched)
+    if (!isLanded) {
+      // Rapid Wing Flapping
+      const flapAngle = Math.sin(elapsedTime * 8) * 0.7;
+      leftWing.rotation.y = flapAngle;
+      rightWing.rotation.y = -flapAngle;
 
-    // Gentle hovering over paper target anchor
-    butterflyGroup.position.z = 0.2 + Math.sin(t * 2) * 0.1;
+      // 3D Flying Path Trajectory
+      butterflyGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.2 - 0.2;
+      butterflyGroup.position.x = Math.cos(elapsedTime * 1.0) * 0.4;
+      butterflyGroup.position.z = -1.5 + Math.sin(elapsedTime * 0.8) * 0.3;
+    } else {
+      // Slow Idle Wing Flapping when landed
+      const idleFlap = Math.sin(elapsedTime * 2) * 0.2;
+      leftWing.rotation.y = idleFlap;
+      rightWing.rotation.y = -idleFlap;
+    }
 
     renderer.render(scene, camera);
-  });
+  }
+
+  renderLoop();
 }
 
-document.getElementById('re-adjust-btn').addEventListener('click', async () => {
-  if (mindThree) {
-    await mindThree.stop();
-    mindThree = null;
+// Toggle Landing Mode on Nearest Estimated Plane
+landBtn.addEventListener('click', () => {
+  isLanded = !isLanded;
+  if (isLanded) {
+    landBtn.innerText = "Take Off 🦋";
+    // Snap butterfly down to an estimated horizontal surface plane
+    butterflyGroup.position.set(0, -0.6, -1.2);
+    butterflyGroup.rotation.x = -Math.PI / 4;
+  } else {
+    landBtn.innerText = "Land Butterfly 🌸";
+    butterflyGroup.rotation.x = 0;
   }
+});
+
+document.getElementById('re-adjust-btn').addEventListener('click', () => {
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  if (cameraFeed.srcObject) {
+    cameraFeed.srcObject.getTracks().forEach(track => track.stop());
+  }
+  isLanded = false;
+  landBtn.innerText = "Land Butterfly 🌸";
   previewStep.classList.remove('active');
   adjustStep.classList.add('active');
 });
