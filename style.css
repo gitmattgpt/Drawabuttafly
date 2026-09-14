@@ -1,0 +1,100 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background-color: #121214;
+  color: #ffffff;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+#app {
+  width: 100%;
+  max-width: 500px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  text-align: center;
+  margin-bottom: 20px;
+  color: #7000ff;
+}
+
+.step {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+}
+
+.step.active {
+  display: flex;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.btn {
+  background: #7000ff;
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 25px;
+  font-weight: bold;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  margin-top: 15px;
+  text-align: center;
+}
+
+.btn.secondary {
+  background: #333;
+}
+
+.canvas-container {
+  width: 100%;
+  max-height: 350px;
+  display: flex;
+  justify-content: center;
+  background: #222;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.controls {
+  width: 100%;
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #7000ff;
+}
+
+#webgl-container {
+  width: 100%;
+  height: 400px;
+  border-radius: 12px;
+  background: #000;
+  overflow: hidden;
+}
+
+.ar-controls {
+  margin-top: 15px;
+}
