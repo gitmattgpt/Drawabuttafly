@@ -6,105 +6,40 @@
 }
 
 body {
-  background-color: #121214;
-  color: #ffffff;
-  display: flex;
-  justify-content: center;
-  min-height: 100vh;
+  background-color: #000;
+  color: #fff;
+  height: 100vh;
   overflow: hidden;
 }
 
 #app {
-  width: 100%;
-  max-width: 500px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
   position: relative;
-  z-index: 2;
+  width: 100vw;
+  height: 100vh;
+}
+
+header {
+  position: absolute;
+  top: 15px;
+  left: 0;
+  width: 100%;
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
 }
 
 header h1 {
-  font-size: 1.4rem;
-  text-align: center;
-  margin-bottom: 20px;
-  color: #7000ff;
+  font-size: 1.2rem;
+  color: #00ffcc;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
 
-.step {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-}
-
-.step.active {
-  display: flex;
-}
-
-input[type="file"] {
-  display: none;
-}
-
-.btn {
-  background: #7000ff;
-  color: #fff;
-  padding: 14px 24px;
-  border-radius: 25px;
-  font-weight: bold;
-  font-size: 1rem;
-  border: none;
-  cursor: pointer;
-  margin-top: 15px;
-  text-align: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-}
-
-.btn.secondary {
-  background: rgba(30, 30, 30, 0.85);
-  backdrop-filter: blur(10px);
-}
-
-.action-btn {
-  background: #00e676;
-  color: #000;
-}
-
-.canvas-container {
-  width: 100%;
-  max-height: 350px;
-  display: flex;
-  justify-content: center;
-  background: #222;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-canvas {
-  max-width: 100%;
-  height: auto;
-}
-
-.controls {
-  width: 100%;
-  margin-top: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-input[type="range"] {
-  width: 100%;
-  accent-color: #7000ff;
-}
-
-/* Fullscreen SLAM AR Viewport */
-#preview-step.active {
-  position: fixed;
+#viewport-container {
+  position: absolute;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 10;
 }
 
 #camera-feed {
@@ -114,7 +49,7 @@ input[type="range"] {
   width: 100vw;
   height: 100vh;
   object-fit: cover;
-  z-index: 1;
+  opacity: 0.3; /* Dim camera background so 3D mesh stands out */
 }
 
 #webgl-container {
@@ -124,16 +59,40 @@ input[type="range"] {
   width: 100vw;
   height: 100vh;
   z-index: 2;
-  pointer-events: none;
 }
 
-.ar-controls {
+.hud-controls {
   position: absolute;
-  bottom: 40px;
+  bottom: 60px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 12px;
-  pointer-events: auto;
   z-index: 20;
+}
+
+.btn {
+  background: #7000ff;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 20px;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+.btn.secondary {
+  background: rgba(40, 40, 40, 0.85);
+}
+
+.status-msg {
+  position: absolute;
+  bottom: 20px;
+  width: 100%;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #00ffcc;
+  z-index: 10;
+  pointer-events: none;
 }
