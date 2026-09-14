@@ -25,11 +25,10 @@ body {
 }
 
 header h1 {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   text-align: center;
   margin-bottom: 20px;
   color: #7000ff;
-  text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
 }
 
 .step {
@@ -93,7 +92,14 @@ input[type="range"] {
   accent-color: #7000ff;
 }
 
-/* Fullscreen Transparent AR Viewport */
+.status-msg {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: #00ffcc;
+  font-weight: bold;
+}
+
+/* Fullscreen MindAR Target Container */
 #preview-step.active {
   position: fixed;
   top: 0;
@@ -101,17 +107,15 @@ input[type="range"] {
   width: 100vw;
   height: 100vh;
   z-index: 10;
-  pointer-events: none;
 }
 
-#webgl-container {
+#ar-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: transparent !important;
-  pointer-events: none;
+  overflow: hidden;
 }
 
 .ar-controls {
