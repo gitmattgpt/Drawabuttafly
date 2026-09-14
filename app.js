@@ -9,10 +9,12 @@ const captureStep = document.getElementById('capture-step');
 const adjustStep = document.getElementById('adjust-step');
 const previewStep = document.getElementById('preview-step');
 const generateBtn = document.getElementById('generate-3d-btn');
+const compilerStatus = document.getElementById('compiler-status');
 
-let videoElement = null;
+let mindThree = null;
+let animationFrameId = null;
 
-// Step 1: Load Image
+// Step 1: Capture Photo
 cameraInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -32,7 +34,7 @@ cameraInput.addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
-// Step 2: Apply Threshold (Luminance to Alpha)
+// Step 2: Luminance Thresholding
 function processAlphaMap() {
   if (!rawImage) return;
   
@@ -45,11 +47,7 @@ function processAlphaMap() {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
-    
-    // Luminance calculation
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-    
-    // Transparent if brighter than threshold
     if (luma > threshold) {
       data[i + 3] = 0;
     }
@@ -57,7 +55,7 @@ function processAlphaMap() {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // Centerline Indicator
+  // Axis Split Indicator
   const splitX = (thresholdCanvas.width * splitSlider.value) / 100;
   ctx.strokeStyle = '#ff0055';
   ctx.lineWidth = 6;
@@ -70,58 +68,49 @@ function processAlphaMap() {
 thresholdSlider.addEventListener('input', processAlphaMap);
 splitSlider.addEventListener('input', processAlphaMap);
 
-// Step 3: 3D AR Scene Setup (Three.js)
-let scene, camera, renderer, leftWing, rightWing, butterflyGroup;
+// Step 3: MindAR Image Target Compiler & 3D Tracking Setup
+generateBtn.addEventListener('click', async () => {
+  compilerStatus.innerText = "Compiling target image for AR tracking...";
+  generateBtn.disabled = true;
 
-generateBtn.addEventListener('click', () => {
-  adjustStep.classList.remove('active');
-  previewStep.classList.add('active');
-  startARCamera();
-  init3DButterfly();
+  try {
+    // Compile photo into target tracker using MindAR Offline Compiler
+    const compiler = new window.MINDAR.IMAGE.Compiler();
+    const targetBuffer = await compiler.compileImageTargets([rawImage], (progress) => {
+      compilerStatus.innerText = `Compiling Target: ${Math.round(progress * 100)}%`;
+    });
+
+    const targetBlob = new Blob([targetBuffer], { type: 'application/octet-stream' });
+    const mindTargetUrl = URL.createObjectURL(targetBlob);
+
+    compilerStatus.innerText = "";
+    generateBtn.disabled = false;
+    adjustStep.classList.remove('active');
+    previewStep.classList.add('active');
+
+    initMindARScene(mindTargetUrl);
+  } catch (err) {
+    console.error(err);
+    compilerStatus.innerText = "Error compiling AR target image. Try another photo.";
+    generateBtn.disabled = false;
+  }
 });
 
-async function startARCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
-    });
-    if (!videoElement) {
-      videoElement = document.createElement('video');
-      videoElement.autoplay = true;
-      videoElement.playsInline = true;
-      videoElement.style.position = 'fixed';
-      videoElement.style.top = '0';
-      videoElement.style.left = '0';
-      videoElement.style.width = '100vw';
-      videoElement.style.height = '100vh';
-      videoElement.style.objectFit = 'cover';
-      videoElement.style.zIndex = '1';
-      document.body.appendChild(videoElement);
-    }
-    videoElement.srcObject = stream;
-  } catch (err) {
-    console.warn("Camera access denied or restricted:", err);
-  }
-}
-
-function init3DButterfly() {
-  const container = document.getElementById('webgl-container');
+async function initMindARScene(mindTargetUrl) {
+  const container = document.getElementById('ar-container');
   container.innerHTML = '';
 
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  // Initialize MindAR Three.js instance
+  mindThree = new window.MINDAR.IMAGE.MindARThree({
+    container: container,
+    imageTargetSrc: mindTargetUrl,
+    uiLoading: "no",
+    uiScanning: "yes"
+  });
 
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
-  camera.position.set(0, 0, 4);
+  const { renderer, scene, camera } = mindThree;
 
-  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(width, height);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setClearColor(0x000000, 0); // 100% transparent background
-  container.appendChild(renderer.domElement);
-
-  // Clean alpha map processing without line overlay
+  // Clean alpha canvas for wing textures
   const cleanCanvas = document.createElement('canvas');
   cleanCanvas.width = thresholdCanvas.width;
   cleanCanvas.height = thresholdCanvas.height;
@@ -136,7 +125,7 @@ function init3DButterfly() {
   }
   cleanCtx.putImageData(imgData, 0, 0);
 
-  // Split textures strictly along split slider axis
+  // Split left and right wing canvases
   const splitRatio = splitSlider.value / 100;
   const splitX = cleanCanvas.width * splitRatio;
 
@@ -152,56 +141,52 @@ function init3DButterfly() {
 
   const leftTex = new THREE.CanvasTexture(leftCanvas);
   const rightTex = new THREE.CanvasTexture(rightCanvas);
-
   const matConfig = { transparent: true, side: THREE.DoubleSide, depthWrite: false };
-  const leftMat = new THREE.MeshBasicMaterial({ map: leftTex, ...matConfig });
-  const rightMat = new THREE.MeshBasicMaterial({ map: rightTex, ...matConfig });
 
-  const wingWidth = 1.2;
-  const wingHeight = 2.0;
+  const wingWidth = 0.6;
+  const wingHeight = 1.0;
 
-  // Left wing geometry
+  // Pivot-aligned wing geometries
   const leftGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   leftGeo.translate(-wingWidth / 2, 0, 0);
-  leftWing = new THREE.Mesh(leftGeo, leftMat);
+  const leftWing = new THREE.Mesh(leftGeo, new THREE.MeshBasicMaterial({ map: leftTex, ...matConfig }));
 
-  // Right wing geometry
   const rightGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   rightGeo.translate(wingWidth / 2, 0, 0);
-  rightWing = new THREE.Mesh(rightGeo, rightMat);
+  const rightWing = new THREE.Mesh(rightGeo, new THREE.MeshBasicMaterial({ map: rightTex, ...matConfig }));
 
-  butterflyGroup = new THREE.Group();
+  const butterflyGroup = new THREE.Group();
   butterflyGroup.add(leftWing);
   butterflyGroup.add(rightWing);
-  butterflyGroup.position.set(0, 0, 0);
-  scene.add(butterflyGroup);
 
-  let clock = new THREE.Clock();
+  // Attach butterfly to the tracked anchor target
+  const anchor = mindThree.addAnchor(0);
+  anchor.group.add(butterflyGroup);
 
-  function animate() {
-    requestAnimationFrame(animate);
-    const elapsedTime = clock.getElapsedTime();
-    
+  const clock = new THREE.Clock();
+
+  // MindAR Start & Render Loop
+  await mindThree.start();
+
+  renderer.setAnimationLoop(() => {
+    const t = clock.getElapsedTime();
+
     // Wing Flapping Animation
-    const flapAngle = Math.sin(elapsedTime * 6) * 0.7;
+    const flapAngle = Math.sin(t * 7) * 0.7;
     leftWing.rotation.y = flapAngle;
     rightWing.rotation.y = -flapAngle;
 
-    // Hover effect over full screen AR view
-    butterflyGroup.position.y = Math.sin(elapsedTime * 2) * 0.2;
-    butterflyGroup.position.x = Math.cos(elapsedTime * 1.2) * 0.15;
+    // Gentle hovering over paper target anchor
+    butterflyGroup.position.z = 0.2 + Math.sin(t * 2) * 0.1;
 
     renderer.render(scene, camera);
-  }
-  
-  animate();
+  });
 }
 
-document.getElementById('re-adjust-btn').addEventListener('click', () => {
-  if (videoElement && videoElement.srcObject) {
-    videoElement.srcObject.getTracks().forEach(track => track.stop());
-    videoElement.remove();
-    videoElement = null;
+document.getElementById('re-adjust-btn').addEventListener('click', async () => {
+  if (mindThree) {
+    await mindThree.stop();
+    mindThree = null;
   }
   previewStep.classList.remove('active');
   adjustStep.classList.add('active');
