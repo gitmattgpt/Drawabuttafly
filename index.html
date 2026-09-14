@@ -3,56 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>AR Butterfly SLAM Studio</title>
+  <title>Live Camera 3D Mesh Generator</title>
   <link rel="stylesheet" href="style.css">
-  
-  <!-- Three.js Engine -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  
-  <!-- AlvaAR WebAssembly SLAM Engine CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/alva-ar@1.0.0/dist/alva_ar.js"></script>
 </head>
 <body>
   <div id="app">
-    <header id="app-header">
-      <h1>AR Butterfly SLAM Tracker</h1>
+    <header>
+      <h1>Live WebAR 3D Scanner</h1>
     </header>
 
-    <!-- Step 1: Upload or Capture Drawing -->
-    <section id="capture-step" class="step active">
-      <p>Take a picture of your butterfly drawing on paper:</p>
-      <input type="file" id="camera-input" accept="image/*" capture="environment">
-      <label for="camera-input" class="btn">📷 Take Photo of Drawing</label>
-    </section>
-
-    <!-- Step 2: Extract Alpha Map -->
-    <section id="adjust-step" class="step">
-      <h2>Isolate Butterfly & Set Hinge</h2>
-      <div class="canvas-container">
-        <canvas id="threshold-canvas"></canvas>
-      </div>
-      
-      <div class="controls">
-        <label for="threshold-slider">Exposure / Alpha Threshold:</label>
-        <input type="range" id="threshold-slider" min="0" max="255" value="180">
-        
-        <label for="split-slider">Centerline (Hinge Axis):</label>
-        <input type="range" id="split-slider" min="10" max="90" value="50">
-        
-        <button id="generate-3d-btn" class="btn">Start SLAM World Tracking 🌐</button>
-      </div>
-    </section>
-
-    <!-- Step 3: Full-Screen SLAM World Viewport -->
-    <section id="preview-step" class="step">
+    <!-- Scan & Mesh Controls -->
+    <div id="viewport-container">
       <video id="camera-feed" autoplay playsinline muted></video>
       <div id="webgl-container"></div>
-      
-      <div class="ar-controls">
-        <button id="land-btn" class="btn action-btn">Land Butterfly 🌸</button>
-        <button id="re-adjust-btn" class="btn secondary">Back to Editing</button>
-      </div>
-    </section>
+    </div>
+
+    <div class="hud-controls">
+      <button id="scan-btn" class="btn">Start Scanning 🎥</button>
+      <button id="reset-btn" class="btn secondary">Reset Mesh 🔄</button>
+    </div>
+    
+    <div id="status" class="status-msg">Move phone slowly around the room to generate mesh...</div>
   </div>
 
   <script src="app.js"></script>
