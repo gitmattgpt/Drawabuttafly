@@ -46,7 +46,7 @@ function processAlphaMap() {
     const g = data[i + 1];
     const b = data[i + 2];
     
-    // Luminance formula
+    // Luminance calculation
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
     
     // Transparent if brighter than threshold
@@ -57,7 +57,7 @@ function processAlphaMap() {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // Draw Centerline Indicator
+  // Centerline Indicator
   const splitX = (thresholdCanvas.width * splitSlider.value) / 100;
   ctx.strokeStyle = '#ff0055';
   ctx.lineWidth = 6;
@@ -80,7 +80,6 @@ generateBtn.addEventListener('click', () => {
   init3DButterfly();
 });
 
-// Initialize Camera Feed Background
 async function startARCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -96,12 +95,12 @@ async function startARCamera() {
       videoElement.style.width = '100vw';
       videoElement.style.height = '100vh';
       videoElement.style.objectFit = 'cover';
-      videoElement.style.zIndex = '-1';
+      videoElement.style.zIndex = '1';
       document.body.appendChild(videoElement);
     }
     videoElement.srcObject = stream;
   } catch (err) {
-    console.warn("Camera stream restricted or unhandled:", err);
+    console.warn("Camera access denied or restricted:", err);
   }
 }
 
@@ -109,16 +108,20 @@ function init3DButterfly() {
   const container = document.getElementById('webgl-container');
   container.innerHTML = '';
 
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
   camera.position.set(0, 0, 4);
 
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setClearColor(0x000000, 0);
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x000000, 0); // 100% transparent background
   container.appendChild(renderer.domElement);
 
-  // Re-process image without the red split line overlay
+  // Clean alpha map processing without line overlay
   const cleanCanvas = document.createElement('canvas');
   cleanCanvas.width = thresholdCanvas.width;
   cleanCanvas.height = thresholdCanvas.height;
@@ -133,23 +136,20 @@ function init3DButterfly() {
   }
   cleanCtx.putImageData(imgData, 0, 0);
 
-  // Crop Left & Right Wing Textures strictly along the split axis
+  // Split textures strictly along split slider axis
   const splitRatio = splitSlider.value / 100;
   const splitX = cleanCanvas.width * splitRatio;
 
-  // Left Canvas
   const leftCanvas = document.createElement('canvas');
   leftCanvas.width = splitX;
   leftCanvas.height = cleanCanvas.height;
   leftCanvas.getContext('2d').drawImage(cleanCanvas, 0, 0, splitX, cleanCanvas.height, 0, 0, splitX, cleanCanvas.height);
 
-  // Right Canvas
   const rightCanvas = document.createElement('canvas');
   rightCanvas.width = cleanCanvas.width - splitX;
   rightCanvas.height = cleanCanvas.height;
   rightCanvas.getContext('2d').drawImage(cleanCanvas, splitX, 0, rightCanvas.width, cleanCanvas.height, 0, 0, rightCanvas.width, cleanCanvas.height);
 
-  // Create Textures & Materials
   const leftTex = new THREE.CanvasTexture(leftCanvas);
   const rightTex = new THREE.CanvasTexture(rightCanvas);
 
@@ -157,16 +157,15 @@ function init3DButterfly() {
   const leftMat = new THREE.MeshBasicMaterial({ map: leftTex, ...matConfig });
   const rightMat = new THREE.MeshBasicMaterial({ map: rightTex, ...matConfig });
 
-  // Geometry Wing Dimensions
   const wingWidth = 1.2;
   const wingHeight = 2.0;
 
-  // Left Wing: Pivot anchored on right edge
+  // Left wing geometry
   const leftGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   leftGeo.translate(-wingWidth / 2, 0, 0);
   leftWing = new THREE.Mesh(leftGeo, leftMat);
 
-  // Right Wing: Pivot anchored on left edge
+  // Right wing geometry
   const rightGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
   rightGeo.translate(wingWidth / 2, 0, 0);
   rightWing = new THREE.Mesh(rightGeo, rightMat);
@@ -183,14 +182,14 @@ function init3DButterfly() {
     requestAnimationFrame(animate);
     const elapsedTime = clock.getElapsedTime();
     
-    // Wing Flapping Motion (Hinge along center)
+    // Wing Flapping Animation
     const flapAngle = Math.sin(elapsedTime * 6) * 0.7;
     leftWing.rotation.y = flapAngle;
     rightWing.rotation.y = -flapAngle;
 
-    // Gentle AR Hovering & Swaying effect
-    butterflyGroup.position.y = Math.sin(elapsedTime * 2) * 0.15;
-    butterflyGroup.position.x = Math.cos(elapsedTime * 1.2) * 0.1;
+    // Hover effect over full screen AR view
+    butterflyGroup.position.y = Math.sin(elapsedTime * 2) * 0.2;
+    butterflyGroup.position.x = Math.cos(elapsedTime * 1.2) * 0.15;
 
     renderer.render(scene, camera);
   }
@@ -201,6 +200,8 @@ function init3DButterfly() {
 document.getElementById('re-adjust-btn').addEventListener('click', () => {
   if (videoElement && videoElement.srcObject) {
     videoElement.srcObject.getTracks().forEach(track => track.stop());
+    videoElement.remove();
+    videoElement = null;
   }
   previewStep.classList.remove('active');
   adjustStep.classList.add('active');
