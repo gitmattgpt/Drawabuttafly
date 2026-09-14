@@ -11,6 +11,7 @@ body {
   display: flex;
   justify-content: center;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 #app {
@@ -19,6 +20,8 @@ body {
   padding: 20px;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 2;
 }
 
 header h1 {
@@ -26,6 +29,7 @@ header h1 {
   text-align: center;
   margin-bottom: 20px;
   color: #7000ff;
+  text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
 }
 
 .step {
@@ -53,10 +57,12 @@ input[type="file"] {
   cursor: pointer;
   margin-top: 15px;
   text-align: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
 
 .btn.secondary {
-  background: #333;
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(10px);
 }
 
 .canvas-container {
@@ -87,14 +93,32 @@ input[type="range"] {
   accent-color: #7000ff;
 }
 
+/* Fullscreen Transparent AR Viewport */
+#preview-step.active {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10;
+  pointer-events: none;
+}
+
 #webgl-container {
-  width: 100%;
-  height: 400px;
-  border-radius: 12px;
-  background: #000;
-  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: transparent !important;
+  pointer-events: none;
 }
 
 .ar-controls {
-  margin-top: 15px;
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  z-index: 20;
 }
