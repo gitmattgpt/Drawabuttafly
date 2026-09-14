@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AR Butterfly Drawing Studio</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>AR Butterfly Generator</h1>
+    </header>
+
+    <!-- Step 1: Upload or Capture -->
+    <section id="capture-step" class="step active">
+      <p>Take a picture of your butterfly drawing on paper:</p>
+      <input type="file" id="camera-input" accept="image/*" capture="environment">
+      <label for="camera-input" class="btn">📷 Open Camera / Upload</label>
+    </section>
+
+    <!-- Step 2: Adjust Alpha Threshold -->
+    <section id="adjust-step" class="step">
+      <h2>Adjust Transparency & Axis</h2>
+      <div class="canvas-container">
+        <canvas id="threshold-canvas"></canvas>
+      </div>
+      
+      <div class="controls">
+        <label for="threshold-slider">Exposure / Threshold Level:</label>
+        <input type="range" id="threshold-slider" min="0" max="255" value="180">
+        
+        <label for="split-slider">Centerline (Wing Mirror Axis):</label>
+        <input type="range" id="split-slider" min="10" max="90" value="50">
+        
+        <button id="generate-3d-btn" class="btn">Animate 3D Butterfly ✨</button>
+      </div>
+    </section>
+
+    <!-- Step 3: 3D AR Flapping Preview -->
+    <section id="preview-step" class="step">
+      <div id="webgl-container"></div>
+      <div class="ar-controls">
+        <button id="re-adjust-btn" class="btn secondary">Back to Editing</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
