@@ -1,4 +1,4 @@
-let scene, camera, renderer, wireframeMesh;
+let scene, camera, renderer, pointCloudMesh;
 const cameraFeed = document.getElementById('camera-feed');
 const scanBtn = document.getElementById('scan-btn');
 const resetBtn = document.getElementById('reset-btn');
@@ -8,7 +8,13 @@ let isScanning = false;
 let pointCloudPositions = [];
 let scanInterval = null;
 
-// Initialize Dual-Camera Feed & 3D Scene
+// Dedicated canvas for Safari image data extraction
+const procCanvas = document.createElement('canvas');
+procCanvas.width = 64;
+procCanvas.height = 48;
+const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+
+// Step 1: Initialize Camera Feed & 3D Environment
 async function initScanner() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -34,62 +40,73 @@ async function initScanner() {
   renderer.setClearColor(0x000000, 0);
   document.getElementById('webgl-container').appendChild(renderer.domElement);
 
-  // Wireframe Mesh Geometry setup
+  // 3D Point-Cloud Mesh Geometry Setup
   const geometry = new THREE.BufferGeometry();
-  const material = new THREE.MeshBasicMaterial({
+  const material = new THREE.PointsMaterial({
     color: 0x00ffcc,
-    wireframe: true,
+    size: 0.03,
     transparent: true,
-    opacity: 0.8
+    opacity: 0.85
   });
 
-  wireframeMesh = new THREE.Mesh(geometry, material);
-  scene.add(wireframeMesh);
-
-  // Device Orientation tracking for camera matrix offset
-  if (window.DeviceOrientationEvent) {
-    window.addEventListener('deviceorientation', handleMotion);
-  }
+  pointCloudMesh = new THREE.Points(geometry, material);
+  scene.add(pointCloudMesh);
 
   animate();
 }
 
-// Camera Motion handling via iPhone Gyroscope
+// Request Motion Sensor Access (Required for iOS Safari)
+async function requestiOSMotionPermission() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const response = await DeviceOrientationEvent.requestPermission();
+      if (response === 'granted') {
+        window.addEventListener('deviceorientation', handleMotion);
+      }
+    } catch (e) {
+      console.warn("Motion permission rejected:", e);
+    }
+  } else if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', handleMotion);
+  }
+}
+
+// Gyroscope Camera Transformation
 function handleMotion(e) {
-  if (!e.alpha) return;
-  const alpha = THREE.MathUtils.degToRad(e.alpha);
-  const beta = THREE.MathUtils.degToRad(e.beta);
-  const gamma = THREE.MathUtils.degToRad(e.gamma);
+  if (e.beta === null) return;
+  const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
+  const beta = THREE.MathUtils.degToRad(e.beta || 0);
+  const gamma = THREE.MathUtils.degToRad(e.gamma || 0);
 
   camera.rotation.set(beta, gamma, alpha, 'YXZ');
 }
 
-// Incremental Depth Mesh Reconstruction from Camera Stream
+// Step 2: Live Mesh Generation Engine
 function captureDepthFrame() {
   if (!isScanning) return;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = 80; // Low-res depth map resolution for real-time performance
-  canvas.height = 60;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
-
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  // Draw current frame into low-res processing canvas
+  procCtx.drawImage(cameraFeed, 0, 0, procCanvas.width, procCanvas.height);
+  const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
   const data = imgData.data;
 
-  // Process frame to derive estimated depth from luminance gradients
-  for (let y = 0; y < canvas.height; y += 4) {
-    for (let x = 0; x < canvas.width; x += 4) {
-      const idx = (y * canvas.width + x) * 4;
-      const luma = (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
+  // Extract luminance features and project to 3D mesh points
+  for (let y = 0; y < procCanvas.height; y += 3) {
+    for (let x = 0; x < procCanvas.width; x += 3) {
+      const idx = (y * procCanvas.width + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      
+      const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-      // Project 2D pixel grid into 3D world space
-      const depth = 1.0 + (1.0 - luma) * 2.5; // Estimated z-depth based on visual contrast
-      const vx = ((x / canvas.width) - 0.5) * depth * 1.5;
-      const vy = -((y / canvas.height) - 0.5) * depth * 1.5;
+      // Calculate depth offset based on pixel luminance
+      const depth = 0.8 + (1.0 - luma) * 2.0; 
+      const vx = ((x / procCanvas.width) - 0.5) * depth * 1.4;
+      const vy = -((y / procCanvas.height) - 0.5) * depth * 1.4;
       const vz = -depth;
 
-      // Transform local coordinates into world space relative to camera orientation
+      // Transform point into global 3D space
       const vertex = new THREE.Vector3(vx, vy, vz);
       vertex.applyEuler(camera.rotation);
 
@@ -97,21 +114,27 @@ function captureDepthFrame() {
     }
   }
 
-  // Update Three.js wireframe mesh geometry incrementally
-  const positionsTyped = new Float32Array(pointCloudPositions);
-  wireframeMesh.geometry.setAttribute('position', new THREE.BufferAttribute(positionsTyped, 3));
-  wireframeMesh.geometry.computeVertexNormals();
-  wireframeMesh.geometry.attributes.position.needsUpdate = true;
+  // Cap vertex array size to keep frame rate silky smooth on iPhone
+  if (pointCloudPositions.length > 15000) {
+    pointCloudPositions.splice(0, 3000);
+  }
 
-  statusMsg.innerText = `Mesh Vertices Generated: ${pointCloudPositions.length / 3}`;
+  // Update Three.js Buffer Geometry
+  const positionsTyped = new Float32Array(pointCloudPositions);
+  pointCloudMesh.geometry.setAttribute('position', new THREE.BufferAttribute(positionsTyped, 3));
+  pointCloudMesh.geometry.attributes.position.needsUpdate = true;
+
+  statusMsg.innerText = `Scanning Room... Active Mesh Points: ${pointCloudPositions.length / 3}`;
 }
 
-// Controls
-scanBtn.addEventListener('click', () => {
+// Step 3: Controls & State Listeners
+scanBtn.addEventListener('click', async () => {
+  await requestiOSMotionPermission();
+
   isScanning = !isScanning;
   if (isScanning) {
     scanBtn.innerText = "Pause Scanning ⏸️";
-    scanInterval = setInterval(captureDepthFrame, 200); // Process 5 meshes/sec
+    scanInterval = setInterval(captureDepthFrame, 150); // Scan 6.5 times per second
   } else {
     scanBtn.innerText = "Resume Scanning 🎥";
     clearInterval(scanInterval);
@@ -120,9 +143,9 @@ scanBtn.addEventListener('click', () => {
 
 resetBtn.addEventListener('click', () => {
   pointCloudPositions = [];
-  wireframeMesh.geometry.dispose();
-  wireframeMesh.geometry = new THREE.BufferGeometry();
-  statusMsg.innerText = "Mesh reset. Move phone slowly around the room to scan...";
+  pointCloudMesh.geometry.dispose();
+  pointCloudMesh.geometry = new THREE.BufferGeometry();
+  statusMsg.innerText = "Mesh cleared. Tap 'Start Scanning' and slowly move your phone.";
 });
 
 function animate() {
