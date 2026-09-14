@@ -64,6 +64,11 @@ input[type="file"] {
   backdrop-filter: blur(10px);
 }
 
+.action-btn {
+  background: #00e676;
+  color: #000;
+}
+
 .canvas-container {
   width: 100%;
   max-height: 350px;
@@ -92,14 +97,7 @@ input[type="range"] {
   accent-color: #7000ff;
 }
 
-.status-msg {
-  margin-top: 12px;
-  font-size: 0.9rem;
-  color: #00ffcc;
-  font-weight: bold;
-}
-
-/* Fullscreen MindAR Target Container */
+/* Fullscreen SLAM AR Viewport */
 #preview-step.active {
   position: fixed;
   top: 0;
@@ -109,13 +107,24 @@ input[type="range"] {
   z-index: 10;
 }
 
-#ar-container {
+#camera-feed {
   position: absolute;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  overflow: hidden;
+  object-fit: cover;
+  z-index: 1;
+}
+
+#webgl-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .ar-controls {
@@ -123,6 +132,8 @@ input[type="range"] {
   bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
   pointer-events: auto;
   z-index: 20;
 }
