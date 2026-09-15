@@ -1,9 +1,18 @@
+Here is the complete updated web application with dynamic Marker Image Tracking Simulation and the new Walking & Flat Wing Tilting Butterfly Behaviors.
+Key New Features Added:
+ * Dynamic Marker Tracking Simulation:
+   * When a butterfly pattern is saved from the refinement editor, the exact cropped paper drawing canvas is instantly registered as an active tracked marker.
+   * A simulated marker tracking frame is positioned directly over the drawing at (0, -0.2, -1.2).
+ * Pinned Animated Walking Butterfly:
+   * The newly captured butterfly instantly anchors to the center (0, 0, 0) of the marker object frame.
+   * It walks in slow circular paths directly across the drawing surface while continuously flapping its wings.
+   * At random intervals, it pauses walking and tilts its wings down completely flat once or twice before resuming its circular walk.
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Butterfly Creator & AR Swarm</title>
+  <title>Butterfly Creator & Marker Tracking AR</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; touch-action: none; }
@@ -173,7 +182,7 @@
     </div>
   </div>
 
-  <!-- Top Camera Control Group: Flashlight, Capture, Camera Flash -->
+  <!-- Top Camera Control Group -->
   <div id="top-cam-controls">
     <button id="flashlight-btn" class="top-action-btn top-side-btn" title="Flashlight Toggle">🔦</button>
     <button id="top-center-cam-btn" class="top-action-btn" title="Capture Pattern">📷</button>
@@ -236,14 +245,29 @@
 
   <script>
     let scene, camera, renderer, testCube, swarmGroup;
+    let markerAnchorGroup, markerImageMesh, walkingButterflyMesh;
     let isScanning = false, swarmModeActive = true;
     let boids = [], savedButterflies = [];
     let deleteTargetId = null;
     let monarchTexture = null;
 
-    // Flash Mode States
+    // Flash States
     let isFlashlightOn = false;
     let isCameraFlashOn = false;
+
+    // Walking / Wing Flap Animation State Machine
+    let walkerState = {
+      angle: 0,
+      radius: 0.12,
+      speed: 0.012,
+      flapPhase: 0,
+      flapSpeed: 0.22,
+      isFlatPaused: false,
+      flatTimer: 0,
+      nextFlatThreshold: 180 + Math.random() * 180, // Frame interval for random wings-flat pause
+      flatPulsationsLeft: 0,
+      flatTargetAngle: 0
+    };
 
     let hasManipulatorBeenUsed = false;
     let isManipulating = false;
@@ -373,12 +397,30 @@
       const monarchData = generateMonarchData();
       monarchTexture = monarchData.threeTex;
 
+      // Fallback Cube for Debugging
       const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
       const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
       testCube = new THREE.Mesh(cubeGeo, cubeMat);
       testCube.position.copy(TARGET_CENTER_POS);
       scene.add(testCube);
 
+      // Marker Tracking Anchor Group (Centered at target location in world)
+      markerAnchorGroup = new THREE.Group();
+      markerAnchorGroup.position.copy(TARGET_CENTER_POS);
+      scene.add(markerAnchorGroup);
+
+      // Tracked Drawing Surface Plane (Simulated Image Marker)
+      const markerGeo = new THREE.PlaneGeometry(0.5, 0.5);
+      const markerMat = new THREE.MeshBasicMaterial({
+        map: monarchTexture,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.65
+      });
+      markerImageMesh = new THREE.Mesh(markerGeo, markerMat);
+      markerAnchorGroup.add(markerImageMesh);
+
+      // Swarm Group
       swarmGroup = new THREE.Group();
       scene.add(swarmGroup);
 
@@ -449,6 +491,25 @@
       });
       renderLibrary();
       updateSwarmCount(parseInt(swarmSlider.value));
+      attachWalkingButterfly(monarchTexture);
+    }
+
+    // Attach walking/flattening butterfly pinned directly over tracked image marker center
+    function attachWalkingButterfly(texture) {
+      if (walkingButterflyMesh) {
+        markerAnchorGroup.remove(walkingButterflyMesh);
+      }
+
+      walkingButterflyMesh = createHingedButterflyMesh(texture);
+      // Elevate slightly above the tracked marker plane to avoid Z-fighting
+      walkingButterflyMesh.position.set(0, 0, 0.015);
+      markerAnchorGroup.add(walkingButterflyMesh);
+
+      // Reset Walker Animation State
+      walkerState.angle = 0;
+      walkerState.flatTimer = 0;
+      walkerState.isFlatPaused = false;
+      walkerState.flatPulsationsLeft = 0;
     }
 
     // Apply Torch Control to Active Video Stream
@@ -471,20 +532,16 @@
       return false;
     }
 
-    // Toggle Flashlight Button Handler
     flashlightBtn.addEventListener('click', async () => {
       isFlashlightOn = !isFlashlightOn;
-      
       const success = await applyHardwareTorch(isFlashlightOn);
       if (isFlashlightOn) {
         flashlightBtn.classList.add('active');
-        if (!success) console.log("Flashlight UI active (Hardware torch pending stream or unsupported on platform).");
       } else {
         flashlightBtn.classList.remove('active');
       }
     });
 
-    // Toggle Camera Flash Snapshot Mode Button Handler
     camFlashBtn.addEventListener('click', () => {
       isCameraFlashOn = !isCameraFlashOn;
       if (isCameraFlashOn) {
@@ -497,10 +554,9 @@
     async function openEditorWithCapture() {
       if (!video.videoWidth) return;
 
-      // Handle Camera Flash Trigger on Capture
       if (isCameraFlashOn) {
         await applyHardwareTorch(true);
-        await new Promise(resolve => setTimeout(resolve, 150)); // Brief flash delay
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
 
       rawCaptureCanvas.width = 512;
@@ -539,7 +595,6 @@
       rawCaptureCtx.fill();
       rawCaptureCtx.restore();
 
-      // Turn off flash if flashlight mode isn't actively enabled
       if (isCameraFlashOn && !isFlashlightOn) {
         await applyHardwareTorch(false);
       }
@@ -712,7 +767,6 @@
 
     function drawGestureOverlay() {
       gCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
-      
       if (!hasManipulatorBeenUsed) return;
 
       const cx = gestureCanvas.width / 2 + touchState.panX;
@@ -722,7 +776,6 @@
       gCtx.translate(cx, cy);
       gCtx.rotate(touchState.rotation);
 
-      // Crop Exclusion Boundary Circle
       gCtx.beginPath();
       gCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
       gCtx.strokeStyle = '#ff9800';
@@ -730,7 +783,6 @@
       gCtx.lineWidth = 2;
       gCtx.stroke();
 
-      // Centerline Reference Alignment Guide
       gCtx.beginPath();
       gCtx.moveTo(0, -touchState.scaleRadius * 1.25);
       gCtx.lineTo(0, touchState.scaleRadius * 1.25);
@@ -747,10 +799,12 @@
       if (swarmModeActive) {
         testCube.visible = false;
         swarmGroup.visible = true;
+        markerAnchorGroup.visible = true;
         statusEl.style.display = "none";
       } else {
         testCube.visible = true;
         swarmGroup.visible = false;
+        markerAnchorGroup.visible = false;
         statusEl.style.display = "block";
       }
     }
@@ -796,6 +850,65 @@
       }
     }
 
+    // Walking & Random Wings-Flat Animation State Controller
+    function updateWalkingButterfly() {
+      if (!walkingButterflyMesh || !markerAnchorGroup.visible) return;
+
+      const left = walkingButterflyMesh.getObjectByName("leftWing");
+      const right = walkingButterflyMesh.getObjectByName("rightWing");
+
+      walkerState.flatTimer++;
+
+      // Check random interval trigger to pause walking and tilt wings down flat
+      if (!walkerState.isFlatPaused && walkerState.flatTimer > walkerState.nextFlatThreshold) {
+        walkerState.isFlatPaused = true;
+        walkerState.flatPulsationsLeft = Math.random() > 0.5 ? 2 : 1;
+        walkerState.flatTimer = 0;
+      }
+
+      if (walkerState.isFlatPaused) {
+        // Smoothly transition wing flap angles to 0 (flat wing posture)
+        const curLeft = left ? left.rotation.y : 0;
+        const targetLeft = 0;
+        const newLeft = THREE.MathUtils.lerp(curLeft, targetLeft, 0.15);
+
+        if (left && right) {
+          left.rotation.y = newLeft;
+          right.rotation.y = -newLeft;
+        }
+
+        // Hold flat pose briefly, pulsation counter determines repetition
+        if (Math.abs(newLeft) < 0.02) {
+          if (walkerState.flatTimer > 40) {
+            walkerState.flatPulsationsLeft--;
+            walkerState.flatTimer = 0;
+            if (walkerState.flatPulsationsLeft <= 0) {
+              walkerState.isFlatPaused = false;
+              walkerState.nextFlatThreshold = 180 + Math.random() * 240;
+            }
+          }
+        }
+      } else {
+        // Circular walking movement step
+        walkerState.angle += walkerState.speed;
+        const x = Math.cos(walkerState.angle) * walkerState.radius;
+        const y = Math.sin(walkerState.angle) * walkerState.radius;
+
+        walkingButterflyMesh.position.set(x, y, 0.015);
+        
+        // Orient butterfly forward along circular tangent direction
+        walkingButterflyMesh.rotation.z = walkerState.angle + Math.PI / 2;
+
+        // Continuous wing flap animation while walking
+        walkerState.flapPhase += walkerState.flapSpeed;
+        const flapAngle = Math.sin(walkerState.flapPhase) * 0.65;
+        if (left && right) {
+          left.rotation.y = flapAngle;
+          right.rotation.y = -flapAngle;
+        }
+      }
+    }
+
     function updateBoids() {
       if (!swarmModeActive) return;
 
@@ -826,6 +939,7 @@
         testCube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), 0.025);
       }
       updateBoids();
+      updateWalkingButterfly();
       renderer.render(scene, camera);
     }
 
@@ -858,6 +972,10 @@
       const newTex = new THREE.CanvasTexture(editorCanvas);
       newTex.needsUpdate = true;
 
+      // Update Active Tracked Paper Image Surface Marker
+      markerImageMesh.material.map = newTex;
+      markerImageMesh.material.needsUpdate = true;
+
       savedButterflies.push({
         id: 'cap-' + Date.now(),
         name: `Custom Pattern #${savedButterflies.length + 1}`,
@@ -865,6 +983,9 @@
         thumb: dataUrl,
         texture: newTex
       });
+
+      // Instantly spawn walking butterfly onto captured marker center (0, 0, 0)
+      attachWalkingButterfly(newTex);
 
       renderLibrary();
       updateSwarmCount(parseInt(swarmSlider.value));
@@ -905,3 +1026,4 @@
   </script>
 </body>
 </html>
+
