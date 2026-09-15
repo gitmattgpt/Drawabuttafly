@@ -3,30 +3,177 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Live Camera 3D Mesh Generator</title>
-  <link rel="stylesheet" href="style.css">
+  <title>iPhone 11 AR Mesh Scanner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; }
+    #viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+    #camera-feed { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.4; }
+    #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+    #hud { position: absolute; bottom: 30px; left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .btn { background: #7000ff; color: #fff; padding: 14px 28px; border-radius: 30px; font-weight: bold; border: none; font-size: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    .btn:active { background: #5200bc; }
+    #status { font-size: 0.85rem; color: #00ffcc; text-shadow: 0 1px 3px #000; background: rgba(0,0,0,0.6); padding: 4px 12px; border-radius: 12px; }
+  </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <div id="app">
-    <header>
-      <h1>Live WebAR 3D Scanner</h1>
-    </header>
 
-    <!-- Scan & Mesh Controls -->
-    <div id="viewport-container">
-      <video id="camera-feed" autoplay playsinline muted></video>
-      <div id="webgl-container"></div>
-    </div>
-
-    <div class="hud-controls">
-      <button id="scan-btn" class="btn">Start Scanning 🎥</button>
-      <button id="reset-btn" class="btn secondary">Reset Mesh 🔄</button>
-    </div>
-    
-    <div id="status" class="status-msg">Move phone slowly around the room to generate mesh...</div>
+  <div id="viewport">
+    <video id="camera-feed" autoplay playsinline muted></video>
+    <div id="webgl-canvas"></div>
   </div>
 
-  <script src="app.js"></script>
+  <div id="hud">
+    <div id="status">Status: Tap "Start AR Scanner"</div>
+    <button id="start-btn" class="btn">Start AR Scanner 🎥</button>
+  </div>
+
+  <script>
+    let scene, camera, renderer, pointMesh, testCube;
+    let isScanning = false;
+    let positions = [];
+    const video = document.getElementById('camera-feed');
+    const startBtn = document.getElementById('start-btn');
+    const statusEl = document.getElementById('status');
+
+    // Hardware Offscreen Canvas for Safari Pixel Processing
+    const procCanvas = document.createElement('canvas');
+    procCanvas.width = 40;
+    procCanvas.height = 30;
+    const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+
+    function init3D() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
+      camera.position.set(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, depth: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      document.getElementById('webgl-canvas').appendChild(renderer.domElement);
+
+      // 1. DIAGNOSTIC TEST MESH (Red wireframe box to confirm WebGL is working on iPhone)
+      const cubeGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
+      testCube = new THREE.Mesh(cubeGeo, cubeMat);
+      testCube.position.set(0, 0, -1.0); // Placed 1 meter in front of camera
+      scene.add(testCube);
+
+      // 2. REAL-TIME AR POINT CLOUD MESH
+      const pointGeo = new THREE.BufferGeometry();
+      const pointMat = new THREE.PointsMaterial({
+        color: 0x00ffcc,
+        size: 0.05,
+        transparent: false // Set to false to prevent Safari WebKit transparency occlusion bugs
+      });
+      pointMesh = new THREE.Points(pointGeo, pointMat);
+      scene.add(pointMesh);
+
+      render();
+    }
+
+    async function startAR() {
+      statusEl.innerText = "Requesting iOS permissions...";
+
+      // iOS Motion Permission
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const response = await DeviceOrientationEvent.requestPermission();
+          if (response === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          }
+        } catch (e) { console.warn(e); }
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+
+      // iPhone Camera Stream
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+        await video.play();
+        statusEl.innerText = "Camera active. Move phone around room.";
+        isScanning = true;
+        startBtn.style.display = "none";
+        
+        // Remove diagnostic cube once camera is online
+        scene.remove(testCube);
+
+        // Scan frame loop
+        setInterval(processCameraFrame, 150);
+      } catch (err) {
+        // Fallback for dual-camera selector if 'exact environment' fails
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        await video.play();
+        isScanning = true;
+        startBtn.style.display = "none";
+        scene.remove(testCube);
+        setInterval(processCameraFrame, 150);
+      }
+    }
+
+    function handleOrientation(e) {
+      if (e.beta === null) return;
+      // Convert iOS degrees to Radians
+      const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
+      const beta = THREE.MathUtils.degToRad(e.beta || 0);
+      const gamma = THREE.MathUtils.degToRad(e.gamma || 0);
+
+      camera.rotation.set(beta, gamma, alpha, 'YXZ');
+    }
+
+    function processCameraFrame() {
+      if (!isScanning || video.readyState !== 4) return;
+
+      procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+      const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+      const data = imgData.data;
+
+      positions = []; // Refresh position array
+
+      for (let y = 0; y < procCanvas.height; y += 2) {
+        for (let x = 0; x < procCanvas.width; x += 2) {
+          const idx = (y * procCanvas.width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+          // Spatial Depth mapping based on contrast gradient
+          const depth = 0.8 + (1.0 - luma) * 1.8;
+          const vx = ((x / procCanvas.width) - 0.5) * depth * 1.2;
+          const vy = -((y / procCanvas.height) - 0.5) * depth * 1.2;
+          const vz = -depth;
+
+          const pt = new THREE.Vector3(vx, vy, vz);
+          pt.applyEuler(camera.rotation);
+
+          positions.push(pt.x, pt.y, pt.z);
+        }
+      }
+
+      const typedArray = new Float32Array(positions);
+      pointMesh.geometry.setAttribute('position', new THREE.BufferAttribute(typedArray, 3));
+      pointMesh.geometry.attributes.position.needsUpdate = true;
+
+      statusEl.innerText = `Active Spatial Vertices: ${positions.length / 3}`;
+    }
+
+    function render() {
+      requestAnimationFrame(render);
+      if (testCube) testCube.rotation.y += 0.02; // Rotate test cube
+      renderer.render(scene, camera);
+    }
+
+    startBtn.addEventListener('click', startAR);
+    window.onload = init3D;
+  </script>
 </body>
 </html>
