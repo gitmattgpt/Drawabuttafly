@@ -1,321 +1,907 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Draw A Butterfly - AR Marker View</title>
-  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Butterfly Creator & AR Swarm</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-      -webkit-user-select: none;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; touch-action: none; }
+    
+    #viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+    #camera-feed { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.35; }
+    #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+    
+    /* 2-Finger Gesture Overlay Canvas */
+    #gesture-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 3; pointer-events: auto; }
 
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: #000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Top Bar Control Cards */
+    #top-bar { 
+      position: absolute; 
+      top: calc(env(safe-area-inset-top, 0px) + 15px); 
+      left: 15px; 
+      right: 15px; 
+      z-index: 10; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      pointer-events: auto; 
     }
+    .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+    .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
 
-    /* Container for WebGL/AR Viewport */
-    #ar-container {
-      width: 100vw;
-      height: 100vh;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-
-    /* UI Overlay Controls */
-    #ui-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 10;
-      pointer-events: none;
+    /* Top Camera Button Group Container */
+    #top-cam-controls {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
       display: flex;
-      flex-direction: column;
-      justify-content: space-between;
       align-items: center;
-      padding: 20px 0;
-    }
-
-    /* Top Action Buttons */
-    .top-controls {
-      pointer-events: auto;
-      display: flex;
       gap: 12px;
-      margin-top: 10px;
+      pointer-events: auto;
     }
 
-    .icon-btn {
+    /* Common Button Base Styling */
+    .top-action-btn {
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      user-select: none;
+    }
+
+    /* Main Center Capture Button */
+    #top-center-cam-btn {
+      width: 58px;
+      height: 58px;
+      font-size: 1.6rem;
+      background: #ff9800;
+      color: #000;
+      border-color: #fff;
+    }
+    #top-center-cam-btn:active { transform: scale(0.92); background: #ffa726; }
+
+    /* Side Flashlight & Camera Flash Test Buttons */
+    .top-side-btn {
       width: 44px;
       height: 44px;
-      border-radius: 50%;
-      background: rgba(255, 170, 0, 0.9);
-      border: 2px solid #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #000;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      font-size: 1.2rem;
+    }
+    .top-side-btn:active { transform: scale(0.90); }
+
+    /* Highlight Active States for Toggles */
+    #flashlight-btn.active {
+      background: #ffb300;
+      border-color: #ffffff;
+      box-shadow: 0 0 15px rgba(255, 179, 0, 0.9), 0 4px 12px rgba(0,0,0,0.8);
+      transform: scale(1.05);
     }
 
-    /* Target Reticle in Center */
-    .center-target {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 260px;
-      height: 260px;
-      border: 2px dashed rgba(255, 170, 0, 0.8);
-      border-radius: 50%;
-      pointer-events: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    #cam-flash-btn.active {
+      background: #00e5ff;
+      border-color: #ffffff;
+      box-shadow: 0 0 15px rgba(0, 229, 255, 0.9), 0 4px 12px rgba(0,0,0,0.8);
+      transform: scale(1.05);
     }
 
-    .center-target::before {
-      content: '';
-      position: absolute;
-      width: 2px;
-      height: 100%;
-      background-color: #ff2a55;
-    }
-
-    /* Bottom Control Bar */
-    .bottom-controls {
-      pointer-events: auto;
-      width: 90%;
-      max-width: 400px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .library-btn {
-      background: rgba(255, 255, 255, 0.2);
+    /* Collapsible Bottom Library Drawer */
+    #library-drawer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 30; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); border-top: 1px solid rgba(255,255,255,0.2); border-radius: 16px 16px 0 0; transition: transform 0.3s ease; transform: translateY(100%); pointer-events: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+    #library-drawer.open { transform: translateY(0); }
+    
+    /* Dynamic Floating Toggle Button */
+    #lib-toggle-btn { 
+      position: absolute; 
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); 
+      left: 50%; 
+      transform: translateX(-50%); 
+      z-index: 35; 
+      background: rgba(255,255,255,0.15); 
       backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.4);
-      color: #fff;
-      padding: 8px 18px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; 
+      padding: 6px 18px; 
+      border-radius: 14px; 
+      font-size: 0.8rem; 
+      font-weight: bold; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+      transition: bottom 0.3s ease; 
+      pointer-events: auto; 
     }
 
-    .slider-card {
-      width: 100%;
-      background: rgba(18, 18, 18, 0.85);
-      backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      color: #ffaa00;
-      font-size: 14px;
-      font-weight: bold;
-    }
+    #drawer-header { padding: 14px 15px 10px 15px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+    .swarm-slider { width: 100px; accent-color: #ff9800; }
+    .max-input-box { width: 44px; height: 28px; background: #222; border: 1px solid #ff9800; color: #fff; border-radius: 6px; text-align: center; font-size: 16px; font-weight: bold; }
 
-    .slider-card input[type="range"] {
-      width: 50%;
-      accent-color: #ffffff;
-    }
+    #library-grid { display: flex; flex-direction: column; gap: 8px; padding: 15px; max-height: 250px; overflow-y: auto; }
+    
+    .lib-item { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .lib-item-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .lib-thumb { width: 44px; height: 44px; object-fit: contain; background: transparent; border-radius: 6px; border: 1px solid #444; }
+    .lib-name-input { background: transparent; border: none; border-bottom: 1px dashed #666; color: #fff; font-size: 0.9rem; font-weight: bold; padding: 2px; width: 140px; }
+    .lib-name-input:focus { border-bottom-color: #ff9800; outline: none; }
+    .btn-del { background: #ff1744; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
 
-    .slider-card .count-badge {
-      background: #000;
-      border: 1px solid #ffaa00;
-      padding: 4px 8px;
-      border-radius: 6px;
-      color: #fff;
-    }
+    /* HUD */
+    #hud { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 65px); left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
+    .btn { background: #ff9800; color: #000; padding: 12px 24px; border-radius: 24px; font-weight: bold; border: none; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    #status { font-size: 0.8rem; color: #ff9800; background: rgba(0,0,0,0.8); padding: 4px 12px; border-radius: 10px; text-align: center; }
+
+    /* Dedicated Alignment & Refinement Editor Modal */
+    #editor-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 150; background: rgba(0,0,0,0.92); display: none; flex-direction: column; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top, 0px) + 20px) 15px calc(env(safe-area-inset-bottom, 0px) + 20px) 15px; pointer-events: auto; }
+    .editor-card { width: 100%; max-width: 380px; background: rgba(20,20,20,0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .editor-row { display: flex; flex-direction: column; gap: 4px; }
+    .editor-row label { font-size: 0.8rem; color: #ff9800; font-weight: bold; display: flex; justify-content: space-between; }
+    .editor-row input[type="range"] { width: 100%; accent-color: #ff9800; }
+    #editor-canvas { width: 280px; height: 280px; border: 1px dashed #ff9800; border-radius: 12px; background: #050505; }
+    .editor-btn-group { display: flex; gap: 12px; width: 100%; max-width: 380px; }
+    .editor-btn { flex: 1; padding: 12px; border-radius: 20px; border: none; font-weight: bold; font-size: 0.9rem; cursor: pointer; }
+
+    /* Confirmation Modal */
+    #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 200; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
+    .modal-card { background: #1a1a1a; border: 1px solid #444; border-radius: 14px; padding: 20px; width: 280px; text-align: center; display: flex; flex-direction: column; gap: 15px; }
+    .modal-btns { display: flex; gap: 10px; justify-content: center; }
+    .modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold; font-size: 0.85rem; }
+    .modal-btn-confirm { background: #ff1744; color: #fff; }
+    .modal-btn-cancel { background: #444; color: #fff; }
   </style>
-
-  <!-- Import Three.js and MindAR libraries -->
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-        "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
-      }
-    }
-  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-  <!-- AR Camera View Container -->
-  <div id="ar-container"></div>
+  <div id="viewport">
+    <video id="camera-feed" autoplay playsinline muted></video>
+    <div id="webgl-canvas"></div>
+    <canvas id="gesture-canvas"></canvas>
+  </div>
 
-  <!-- UI Elements Overlay -->
-  <div id="ui-overlay">
-    <!-- Top Action Toolbar -->
-    <div class="top-controls">
-      <button class="icon-btn" id="btn-flash" title="Toggle Flashlight">🔦</button>
-      <button class="icon-btn" id="btn-capture" title="Capture Pattern">📷</button>
-      <button class="icon-btn" id="btn-retrack" title="Refocus Target">📸</button>
+  <!-- Top Control Panel -->
+  <div id="top-bar">
+    <div class="control-card">
+      <label class="swarm-toggle-label">
+        <input type="checkbox" id="swarm-toggle" checked> Swarm Mode
+      </label>
+    </div>
+  </div>
+
+  <!-- Top Camera Control Group: Flashlight, Capture, Camera Flash -->
+  <div id="top-cam-controls">
+    <button id="flashlight-btn" class="top-action-btn top-side-btn" title="Flashlight Toggle">🔦</button>
+    <button id="top-center-cam-btn" class="top-action-btn" title="Capture Pattern">📷</button>
+    <button id="cam-flash-btn" class="top-action-btn top-side-btn" title="Camera Flash Snapshot Toggle">📸</button>
+  </div>
+
+  <!-- Dynamic Bottom Toggle Button -->
+  <button id="lib-toggle-btn">Show Library ▲</button>
+
+  <!-- Collapsible Library Drawer -->
+  <div id="library-drawer">
+    <div id="drawer-header">
+      <span style="font-weight:bold; color:#ff9800; font-size:0.85rem;">Swarm Count</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="range" id="swarm-slider" class="swarm-slider" min="1" max="20" value="10">
+        <input type="number" id="max-slider-input" class="max-input-box" value="20" min="1" max="500">
+      </div>
+    </div>
+    <div id="library-grid"></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="status">Sensors Initializing...</div>
+    <button id="start-btn" class="btn">Start AR Session 🎥</button>
+  </div>
+
+  <!-- Refinement Editor Modal -->
+  <div id="editor-modal">
+    <div style="font-weight:bold; color:#ff9800; margin-top:10px;">Refine Captured Butterfly</div>
+    <canvas id="editor-canvas" width="512" height="512"></canvas>
+    
+    <div class="editor-card">
+      <div class="editor-row">
+        <label>Centerline Alignment <span id="center-val">50%</span></label>
+        <input type="range" id="center-slider" min="0" max="100" value="50">
+      </div>
+      <div class="editor-row">
+        <label>Transparency Threshold <span id="trans-val">15%</span></label>
+        <input type="range" id="trans-slider" min="0" max="100" value="15">
+      </div>
     </div>
 
-    <!-- Alignment Guideline Overlay -->
-    <div class="center-target"></div>
+    <div class="editor-btn-group">
+      <button id="editor-cancel" class="editor-btn" style="background:#444; color:#fff;">Discard</button>
+      <button id="editor-save" class="editor-btn" style="background:#ff9800; color:#000;">Add to Swarm 🦋</button>
+    </div>
+  </div>
 
-    <!-- Bottom Controls -->
-    <div class="bottom-controls">
-      <button class="library-btn">Show Library ▲</button>
-      
-      <div class="slider-card">
-        <span>Swarm Count</span>
-        <input type="range" id="swarm-slider" min="1" max="50" value="20" />
-        <span class="count-badge" id="swarm-count-text">20</span>
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal">
+    <div class="modal-card">
+      <p id="modal-msg" style="font-size:0.9rem;">Are you sure you want to delete this butterfly?</p>
+      <div class="modal-btns">
+        <button id="modal-confirm" class="modal-btn modal-btn-confirm">Delete</button>
+        <button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
       </div>
     </div>
   </div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { MindARThree } from 'mindar-image-three';
+  <script>
+    let scene, camera, renderer, testCube, swarmGroup;
+    let isScanning = false, swarmModeActive = true;
+    let boids = [], savedButterflies = [];
+    let deleteTargetId = null;
+    let monarchTexture = null;
 
-    let mindarThree = null;
-    let pinnedButterflyMesh = null;
-    let wingAngle = 0;
+    // Flash Mode States
+    let isFlashlightOn = false;
+    let isCameraFlashOn = false;
 
-    // Initialize AR system and Image Tracker
-    const initAR = async () => {
-      // Setup AR Controller attached to view container
-      mindarThree = new MindARThree({
-        container: document.querySelector("#ar-container"),
-        // Load default camera target marker or dynamically registered marker
-        imageTargetSrc: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
-        maxTrack: 1
-      });
-
-      const { renderer, scene, camera } = mindarThree;
-
-      // -------------------------------------------------------------
-      // PINNED ANCHOR LOGIC:
-      // The butterfly attaches ONLY to the specific image target marker.
-      // It stays anchored at (0, 0, 0) relative to the piece of paper.
-      // -------------------------------------------------------------
-      const anchor = mindarThree.addAnchor(0);
-
-      // Create procedural Butterfly 3D Object
-      pinnedButterflyMesh = create3DButterfly();
-      
-      // Position directly on top center of physical paper target
-      pinnedButterflyMesh.position.set(0, 0, 0);
-      
-      // Attach butterfly directly to the marker's local group space
-      anchor.group.add(pinnedButterflyMesh);
-
-      // Target visibility listeners
-      anchor.onTargetFound = () => {
-        pinnedButterflyMesh.visible = true;
-      };
-      
-      anchor.onTargetLost = () => {
-        pinnedButterflyMesh.visible = false;
-      };
-
-      // Start AR camera feed
-      await mindarThree.start();
-
-      // Render Loop
-      renderer.setAnimationLoop(() => {
-        // Continuous wing flapping and circular walking animation on top of the paper
-        if (pinnedButterflyMesh && pinnedButterflyMesh.visible) {
-          animateButterfly(pinnedButterflyMesh);
-        }
-        renderer.render(scene, camera);
-      });
+    let hasManipulatorBeenUsed = false;
+    let isManipulating = false;
+    let touchState = {
+      panX: 0, panY: 0,
+      rotation: 0,
+      scaleRadius: 120,
+      startDist: 0, startAngle: 0,
+      startPanX: 0, startPanY: 0, startRadius: 120
     };
 
-    // Helper: Construct animated 3D Butterfly Mesh
-    function create3DButterfly() {
-      const butterflyGroup = new THREE.Group();
+    const rawCaptureCanvas = document.createElement('canvas');
+    const rawCaptureCtx = rawCaptureCanvas.getContext('2d');
+    
+    const editorCanvas = document.getElementById('editor-canvas');
+    const editorCtx = editorCanvas.getContext('2d');
 
-      // Wing Material (Transparent Canvas Texture Target)
-      const wingGeometry = new THREE.PlaneGeometry(0.5, 0.5);
-      const wingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffaa00,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.9
-      });
+    const TARGET_CENTER_POS = new THREE.Vector3(0, -0.2, -1.2);
+
+    const video = document.getElementById('camera-feed');
+    const gestureCanvas = document.getElementById('gesture-canvas');
+    const gCtx = gestureCanvas.getContext('2d');
+    
+    const startBtn = document.getElementById('start-btn');
+    const statusEl = document.getElementById('status');
+    const swarmToggle = document.getElementById('swarm-toggle');
+    const swarmSlider = document.getElementById('swarm-slider');
+    const maxSliderInput = document.getElementById('max-slider-input');
+    const camBtn = document.getElementById('top-center-cam-btn');
+    const flashlightBtn = document.getElementById('flashlight-btn');
+    const camFlashBtn = document.getElementById('cam-flash-btn');
+    
+    const libToggleBtn = document.getElementById('lib-toggle-btn');
+    const libraryDrawer = document.getElementById('library-drawer');
+    const libraryGrid = document.getElementById('library-grid');
+    
+    const editorModal = document.getElementById('editor-modal');
+    const centerSlider = document.getElementById('center-slider');
+    const transSlider = document.getElementById('trans-slider');
+    const editorSave = document.getElementById('editor-save');
+    const editorCancel = document.getElementById('editor-cancel');
+
+    const confirmModal = document.getElementById('confirm-modal');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+
+    const euler = new THREE.Euler();
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+
+    function generateMonarchData() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, 512, 512);
 
       // Left Wing
-      const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
-      leftWing.name = "leftWing";
-      leftWing.geometry.translate(-0.25, 0, 0); // Origin at wing pivot
-      butterflyGroup.add(leftWing);
+      ctx.fillStyle = '#ff6d00';
+      ctx.beginPath();
+      ctx.moveTo(250, 256);
+      ctx.bezierCurveTo(160, 80, 40, 100, 30, 220);
+      ctx.bezierCurveTo(20, 340, 140, 420, 250, 256);
+      ctx.fill();
 
       // Right Wing
-      const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
-      rightWing.name = "rightWing";
-      rightWing.geometry.translate(0.25, 0, 0); // Origin at wing pivot
-      butterflyGroup.add(rightWing);
+      ctx.beginPath();
+      ctx.moveTo(262, 256);
+      ctx.bezierCurveTo(352, 80, 472, 100, 482, 220);
+      ctx.bezierCurveTo(492, 340, 372, 420, 262, 256);
+      ctx.fill();
 
-      // Body
-      const bodyGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.4);
-      const bodyMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.rotation.x = Math.PI / 2;
-      butterflyGroup.add(body);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 14;
+      ctx.stroke();
 
-      // Scale relative to tracking target size
-      butterflyGroup.scale.set(1.2, 1.2, 1.2);
+      // Veins
+      ctx.beginPath();
+      ctx.moveTo(250, 256); ctx.lineTo(100, 160);
+      ctx.moveTo(250, 256); ctx.lineTo(80, 250);
+      ctx.moveTo(250, 256); ctx.lineTo(130, 340);
+      ctx.moveTo(262, 256); ctx.lineTo(412, 160);
+      ctx.moveTo(262, 256); ctx.lineTo(432, 250);
+      ctx.moveTo(262, 256); ctx.lineTo(382, 340);
+      ctx.lineWidth = 6;
+      ctx.stroke();
 
-      return butterflyGroup;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 18;
+      ctx.stroke();
+
+      // White Spots
+      ctx.fillStyle = '#fff';
+      const spots = [
+        [50, 200], [60, 150], [90, 120], [140, 100],
+        [462, 200], [452, 150], [422, 120], [372, 100]
+      ];
+      spots.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const threeTex = new THREE.CanvasTexture(canvas);
+      threeTex.needsUpdate = true;
+
+      return { dataUrl, threeTex };
     }
 
-    // Butterfly local walking and flapping animation
-    function animateButterfly(butterfly) {
-      wingAngle += 0.15;
-      const flap = Math.sin(wingAngle) * 0.6;
+    function init3D() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
 
-      const leftWing = butterfly.getObjectByName("leftWing");
-      const rightWing = butterfly.getObjectByName("rightWing");
+      gestureCanvas.width = width;
+      gestureCanvas.height = height;
 
-      if (leftWing && rightWing) {
-        leftWing.rotation.y = flap;
-        rightWing.rotation.y = -flap;
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(60, width / height, 0.05, 100);
+      camera.position.set(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      document.getElementById('webgl-canvas').appendChild(renderer.domElement);
+
+      const monarchData = generateMonarchData();
+      monarchTexture = monarchData.threeTex;
+
+      const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+      const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
+      testCube = new THREE.Mesh(cubeGeo, cubeMat);
+      testCube.position.copy(TARGET_CENTER_POS);
+      scene.add(testCube);
+
+      swarmGroup = new THREE.Group();
+      scene.add(swarmGroup);
+
+      addDefaultMonarch(monarchData.dataUrl);
+      setupGestureListeners();
+      setModeState(swarmToggle.checked);
+
+      window.addEventListener('resize', handleResize);
+
+      render();
+    }
+
+    function handleResize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      gestureCanvas.width = width;
+      gestureCanvas.height = height;
+      
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+
+      clampManipulatorPosition();
+      drawGestureOverlay();
+    }
+
+    function createHingedButterflyMesh(texture) {
+      const group = new THREE.Group();
+      const wingWidth = 0.16, wingHeight = 0.16;
+
+      const wingMat = new THREE.MeshBasicMaterial({
+        map: texture || monarchTexture,
+        side: THREE.DoubleSide,
+        transparent: true,
+        alphaTest: 0.1,
+        depthWrite: false
+      });
+
+      const leftGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
+      leftGeo.translate(-wingWidth / 2, 0, 0);
+      const leftUv = leftGeo.attributes.uv;
+      for (let i = 0; i < leftUv.count; i++) leftUv.setX(i, leftUv.getX(i) * 0.5);
+
+      const leftWing = new THREE.Mesh(leftGeo, wingMat);
+      leftWing.name = "leftWing";
+
+      const rightGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
+      rightGeo.translate(wingWidth / 2, 0, 0);
+      const rightUv = rightGeo.attributes.uv;
+      for (let i = 0; i < rightUv.count; i++) rightUv.setX(i, 0.5 + rightUv.getX(i) * 0.5);
+
+      const rightWing = new THREE.Mesh(rightGeo, wingMat);
+      rightWing.name = "rightWing";
+
+      group.add(leftWing);
+      group.add(rightWing);
+      return group;
+    }
+
+    function addDefaultMonarch(thumbUrl) {
+      savedButterflies.push({
+        id: 'monarch-default',
+        name: 'Monarch Butterfly',
+        activeInSwarm: true,
+        thumb: thumbUrl,
+        texture: monarchTexture
+      });
+      renderLibrary();
+      updateSwarmCount(parseInt(swarmSlider.value));
+    }
+
+    // Apply Torch Control to Active Video Stream
+    async function applyHardwareTorch(enable) {
+      if (!video.srcObject) return false;
+      const track = video.srcObject.getVideoTracks()[0];
+      if (!track) return false;
+
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        try {
+          await track.applyConstraints({
+            advanced: [{ torch: enable }]
+          });
+          return true;
+        } catch (err) {
+          console.warn("Torch failed to apply:", err);
+        }
+      }
+      return false;
+    }
+
+    // Toggle Flashlight Button Handler
+    flashlightBtn.addEventListener('click', async () => {
+      isFlashlightOn = !isFlashlightOn;
+      
+      const success = await applyHardwareTorch(isFlashlightOn);
+      if (isFlashlightOn) {
+        flashlightBtn.classList.add('active');
+        if (!success) console.log("Flashlight UI active (Hardware torch pending stream or unsupported on platform).");
+      } else {
+        flashlightBtn.classList.remove('active');
+      }
+    });
+
+    // Toggle Camera Flash Snapshot Mode Button Handler
+    camFlashBtn.addEventListener('click', () => {
+      isCameraFlashOn = !isCameraFlashOn;
+      if (isCameraFlashOn) {
+        camFlashBtn.classList.add('active');
+      } else {
+        camFlashBtn.classList.remove('active');
+      }
+    });
+
+    async function openEditorWithCapture() {
+      if (!video.videoWidth) return;
+
+      // Handle Camera Flash Trigger on Capture
+      if (isCameraFlashOn) {
+        await applyHardwareTorch(true);
+        await new Promise(resolve => setTimeout(resolve, 150)); // Brief flash delay
       }
 
-      // Slow circular path across the paper target surface
-      const radius = 0.1;
-      butterfly.position.x = Math.cos(wingAngle * 0.2) * radius;
-      butterfly.position.z = Math.sin(wingAngle * 0.2) * radius;
-      butterfly.rotation.y = -(wingAngle * 0.2) + Math.PI / 2;
+      rawCaptureCanvas.width = 512;
+      rawCaptureCanvas.height = 512;
+
+      rawCaptureCtx.save();
+      rawCaptureCtx.fillStyle = '#ffffff';
+      rawCaptureCtx.fillRect(0, 0, 512, 512);
+
+      rawCaptureCtx.translate(256, 256);
+      rawCaptureCtx.rotate(-touchState.rotation);
+
+      const scale = 256 / Math.max(30, touchState.scaleRadius);
+      rawCaptureCtx.scale(scale, scale);
+
+      const offsetX = -touchState.panX;
+      const offsetY = -touchState.panY;
+
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const aspect = vW / vH;
+      let drawW = 512;
+      let drawH = 512 / aspect;
+
+      rawCaptureCtx.drawImage(
+        video,
+        offsetX - drawW / 2,
+        offsetY - drawH / 2,
+        drawW,
+        drawH
+      );
+
+      rawCaptureCtx.globalCompositeOperation = 'destination-in';
+      rawCaptureCtx.beginPath();
+      rawCaptureCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
+      rawCaptureCtx.fill();
+      rawCaptureCtx.restore();
+
+      // Turn off flash if flashlight mode isn't actively enabled
+      if (isCameraFlashOn && !isFlashlightOn) {
+        await applyHardwareTorch(false);
+      }
+
+      editorModal.style.display = 'flex';
+      updateEditorPreview();
     }
 
-    // UI Controls Setup
-    const slider = document.getElementById("swarm-slider");
-    const countText = document.getElementById("swarm-count-text");
+    function updateEditorPreview() {
+      editorCtx.clearRect(0, 0, 512, 512);
 
-    slider.addEventListener("input", (e) => {
-      countText.innerText = e.target.value;
+      const centerShift = (parseInt(centerSlider.value) - 50) * 2;
+      const thresholdVal = parseInt(transSlider.value) / 100;
+
+      editorCtx.save();
+      editorCtx.drawImage(rawCaptureCanvas, centerShift, 0);
+
+      const imgData = editorCtx.getImageData(0, 0, 512, 512);
+      const data = imgData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const brightness = (r + g + b) / (3 * 255);
+        if (brightness > (1 - thresholdVal)) {
+          data[i + 3] = 0;
+        }
+      }
+
+      editorCtx.putImageData(imgData, 0, 0);
+
+      editorCtx.strokeStyle = 'rgba(255, 23, 68, 0.6)';
+      editorCtx.lineWidth = 3;
+      editorCtx.beginPath();
+      editorCtx.moveTo(256, 0);
+      editorCtx.lineTo(256, 512);
+      editorCtx.stroke();
+
+      editorCtx.restore();
+    }
+
+    function renderLibrary() {
+      libraryGrid.innerHTML = '';
+      savedButterflies.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'lib-item';
+        div.innerHTML = `
+          <div class="lib-item-info">
+            <input type="checkbox" ${item.activeInSwarm ? 'checked' : ''} data-id="${item.id}" class="lib-toggle">
+            <img src="${item.thumb}" class="lib-thumb">
+            <input type="text" value="${item.name}" data-id="${item.id}" class="lib-name-input">
+          </div>
+          <button class="btn-del" data-id="${item.id}">Delete</button>
+        `;
+        libraryGrid.appendChild(div);
+      });
+
+      document.querySelectorAll('.lib-toggle').forEach(chk => {
+        chk.addEventListener('change', (e) => {
+          const id = e.target.getAttribute('data-id');
+          const bfly = savedButterflies.find(b => b.id === id);
+          if (bfly) bfly.activeInSwarm = e.target.checked;
+          updateSwarmCount(parseInt(swarmSlider.value));
+        });
+      });
+
+      document.querySelectorAll('.lib-name-input').forEach(inp => {
+        inp.addEventListener('change', (e) => {
+          const id = e.target.getAttribute('data-id');
+          const bfly = savedButterflies.find(b => b.id === id);
+          if (bfly) bfly.name = e.target.value;
+        });
+      });
+
+      document.querySelectorAll('.btn-del').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          deleteTargetId = e.target.getAttribute('data-id');
+          confirmModal.style.display = 'flex';
+        });
+      });
+    }
+
+    function updateSwarmCount(count) {
+      while(swarmGroup.children.length > 0) {
+        swarmGroup.remove(swarmGroup.children[0]);
+      }
+      boids = [];
+
+      const activeList = savedButterflies.filter(b => b.activeInSwarm);
+      if (activeList.length === 0) return;
+
+      for(let i = 0; i < count; i++) {
+        const sourcePattern = activeList[i % activeList.length];
+        const bfly = createHingedButterflyMesh(sourcePattern.texture);
+        
+        const boid = {
+          mesh: bfly,
+          pos: TARGET_CENTER_POS.clone().add(new THREE.Vector3(
+            (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 0.8
+          )),
+          vel: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.02,
+            (Math.random() - 0.5) * 0.02,
+            (Math.random() - 0.5) * 0.02
+          ),
+          flapSpeed: 0.18 + Math.random() * 0.08,
+          flapPhase: Math.random() * Math.PI * 2
+        };
+
+        bfly.position.copy(boid.pos);
+        swarmGroup.add(bfly);
+        boids.push(boid);
+      }
+    }
+
+    function clampManipulatorPosition() {
+      const margin = 20;
+      const screenHalfW = gestureCanvas.width / 2;
+      const screenHalfH = gestureCanvas.height / 2;
+
+      touchState.panX = Math.max(-screenHalfW + margin, Math.min(screenHalfW - margin, touchState.panX));
+      touchState.panY = Math.max(-screenHalfH + margin, Math.min(screenHalfH - margin, touchState.panY));
+    }
+
+    function setupGestureListeners() {
+      gestureCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          hasManipulatorBeenUsed = true;
+          isManipulating = true;
+          const t1 = e.touches[0], t2 = e.touches[1];
+          touchState.startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+          touchState.startAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+          touchState.startPanX = touchState.panX - (t1.clientX + t2.clientX) / 2;
+          touchState.startPanY = touchState.panY - (t1.clientY + t2.clientY) / 2;
+          touchState.startRadius = touchState.scaleRadius;
+          drawGestureOverlay();
+        }
+      });
+
+      gestureCanvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && isManipulating) {
+          e.preventDefault();
+          const t1 = e.touches[0], t2 = e.touches[1];
+          const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+          touchState.scaleRadius = Math.max(30, touchState.startRadius * (dist / touchState.startDist));
+
+          const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+          touchState.rotation += (angle - touchState.startAngle);
+          touchState.startAngle = angle;
+
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+          
+          touchState.panX = midX + touchState.startPanX;
+          touchState.panY = midY + touchState.startPanY;
+
+          clampManipulatorPosition();
+          drawGestureOverlay();
+        }
+      });
+
+      gestureCanvas.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+          isManipulating = false;
+        }
+      });
+    }
+
+    function drawGestureOverlay() {
+      gCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+      
+      if (!hasManipulatorBeenUsed) return;
+
+      const cx = gestureCanvas.width / 2 + touchState.panX;
+      const cy = gestureCanvas.height / 2 + touchState.panY;
+
+      gCtx.save();
+      gCtx.translate(cx, cy);
+      gCtx.rotate(touchState.rotation);
+
+      // Crop Exclusion Boundary Circle
+      gCtx.beginPath();
+      gCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
+      gCtx.strokeStyle = '#ff9800';
+      gCtx.setLineDash([6, 6]);
+      gCtx.lineWidth = 2;
+      gCtx.stroke();
+
+      // Centerline Reference Alignment Guide
+      gCtx.beginPath();
+      gCtx.moveTo(0, -touchState.scaleRadius * 1.25);
+      gCtx.lineTo(0, touchState.scaleRadius * 1.25);
+      gCtx.strokeStyle = '#ff1744';
+      gCtx.setLineDash([]);
+      gCtx.lineWidth = 2.5;
+      gCtx.stroke();
+
+      gCtx.restore();
+    }
+
+    function setModeState(isSwarmActive) {
+      swarmModeActive = isSwarmActive;
+      if (swarmModeActive) {
+        testCube.visible = false;
+        swarmGroup.visible = true;
+        statusEl.style.display = "none";
+      } else {
+        testCube.visible = true;
+        swarmGroup.visible = false;
+        statusEl.style.display = "block";
+      }
+    }
+
+    async function startAR() {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res === 'granted') {
+            window.addEventListener('deviceorientation', handleiOSOrientation);
+          }
+        } catch (e) { console.warn(e); }
+      } else {
+        window.addEventListener('deviceorientation', handleiOSOrientation);
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        isScanning = true;
+        startBtn.style.display = "none";
+      } catch (err) {
+        statusEl.innerText = "Camera permission denied.";
+      }
+    }
+
+    function handleiOSOrientation(e) {
+      if (e.beta === null) return;
+      const alpha = e.alpha ? THREE.MathUtils.degToRad(e.alpha) : 0;
+      const beta = e.beta ? THREE.MathUtils.degToRad(e.beta) : 0;
+      const gamma = e.gamma ? THREE.MathUtils.degToRad(e.gamma) : 0;
+
+      euler.set(beta, gamma, -alpha, 'YXZ');
+      camera.quaternion.setFromEuler(euler);
+      camera.quaternion.multiply(q1);
+
+      if (!swarmModeActive) {
+        statusEl.innerText = `Pitch: ${(beta * 57.29).toFixed(1)}° | Roll: ${(gamma * 57.29).toFixed(1)}° | Yaw: ${(alpha * 57.29).toFixed(1)}°`;
+      }
+    }
+
+    function updateBoids() {
+      if (!swarmModeActive) return;
+
+      boids.forEach((boid) => {
+        const pullCenter = TARGET_CENTER_POS.clone().sub(boid.pos).multiplyScalar(0.015);
+        boid.vel.add(pullCenter);
+        boid.vel.clampLength(0.005, 0.025);
+        boid.pos.add(boid.vel);
+        boid.mesh.position.copy(boid.pos);
+
+        boid.flapPhase += boid.flapSpeed;
+        const flapAngle = Math.sin(boid.flapPhase) * 0.75;
+        
+        const left = boid.mesh.getObjectByName("leftWing");
+        const right = boid.mesh.getObjectByName("rightWing");
+        if(left && right) {
+          left.rotation.y = flapAngle;
+          right.rotation.y = -flapAngle;
+        }
+
+        boid.mesh.lookAt(boid.pos.clone().add(boid.vel));
+      });
+    }
+
+    function render() {
+      requestAnimationFrame(render);
+      if (testCube && testCube.visible) {
+        testCube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), 0.025);
+      }
+      updateBoids();
+      renderer.render(scene, camera);
+    }
+
+    libToggleBtn.addEventListener('click', () => {
+      const isOpen = libraryDrawer.classList.toggle('open');
+      if (isOpen) {
+        const drawerHeight = libraryDrawer.offsetHeight;
+        libToggleBtn.style.bottom = `${drawerHeight + 8}px`;
+        libToggleBtn.innerText = 'Hide Library ▼';
+      } else {
+        libToggleBtn.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 12px)';
+        libToggleBtn.innerText = 'Show Library ▲';
+      }
     });
 
-    // Run AR App
-    window.addEventListener("DOMContentLoaded", () => {
-      initAR();
+    camBtn.addEventListener('click', openEditorWithCapture);
+
+    centerSlider.addEventListener('input', (e) => {
+      document.getElementById('center-val').innerText = `${e.target.value}%`;
+      updateEditorPreview();
     });
+
+    transSlider.addEventListener('input', (e) => {
+      document.getElementById('trans-val').innerText = `${e.target.value}%`;
+      updateEditorPreview();
+    });
+
+    editorSave.addEventListener('click', () => {
+      const dataUrl = editorCanvas.toDataURL('image/png');
+      const newTex = new THREE.CanvasTexture(editorCanvas);
+      newTex.needsUpdate = true;
+
+      savedButterflies.push({
+        id: 'cap-' + Date.now(),
+        name: `Custom Pattern #${savedButterflies.length + 1}`,
+        activeInSwarm: true,
+        thumb: dataUrl,
+        texture: newTex
+      });
+
+      renderLibrary();
+      updateSwarmCount(parseInt(swarmSlider.value));
+      editorModal.style.display = 'none';
+    });
+
+    editorCancel.addEventListener('click', () => {
+      editorModal.style.display = 'none';
+    });
+
+    modalConfirm.addEventListener('click', () => {
+      if (deleteTargetId) {
+        savedButterflies = savedButterflies.filter(b => b.id !== deleteTargetId);
+        renderLibrary();
+        updateSwarmCount(parseInt(swarmSlider.value));
+        deleteTargetId = null;
+      }
+      confirmModal.style.display = 'none';
+    });
+
+    modalCancel.addEventListener('click', () => {
+      deleteTargetId = null;
+      confirmModal.style.display = 'none';
+    });
+
+    swarmToggle.addEventListener('change', (e) => setModeState(e.target.checked));
+    swarmSlider.addEventListener('input', (e) => updateSwarmCount(parseInt(e.target.value)));
+    
+    maxSliderInput.addEventListener('change', (e) => {
+      let val = parseInt(e.target.value) || 20;
+      if (val < 1) val = 1;
+      swarmSlider.max = val;
+      maxSliderInput.value = val;
+    });
+
+    startBtn.addEventListener('click', startAR);
+    window.onload = init3D;
   </script>
 </body>
 </html>
