@@ -18,15 +18,15 @@
     /* Top Controls Bar */
     #top-bar { position: absolute; top: 15px; left: 15px; right: 15px; z-index: 10; display: flex; justify-content: space-between; align-items: center; pointer-events: auto; }
     .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
-    .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #00ffcc; display: flex; align-items: center; gap: 6px; }
-    .swarm-slider { width: 80px; accent-color: #00e676; }
-    .max-input-box { width: 44px; height: 28px; background: #222; border: 1px solid #00ffcc; color: #fff; border-radius: 6px; text-align: center; font-size: 16px; font-weight: bold; }
+    .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
+    .swarm-slider { width: 80px; accent-color: #ff9800; }
+    .max-input-box { width: 44px; height: 28px; background: #222; border: 1px solid #ff9800; color: #fff; border-radius: 6px; text-align: center; font-size: 16px; font-weight: bold; }
 
-    /* Creator Sliders (Centerline & Transparency) */
+    /* Creator Sliders */
     #creator-controls { position: absolute; top: 75px; left: 15px; right: 15px; z-index: 10; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
     .slider-row { background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 4px; }
-    .slider-row label { font-size: 0.75rem; color: #00ffcc; font-weight: bold; display: flex; justify-content: space-between; }
-    .slider-row input[type="range"] { width: 100%; accent-color: #00e676; }
+    .slider-row label { font-size: 0.75rem; color: #ff9800; font-weight: bold; display: flex; justify-content: space-between; }
+    .slider-row input[type="range"] { width: 100%; accent-color: #ff9800; }
 
     /* Collapsible Bottom Library Drawer */
     #library-drawer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 20; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); border-top: 1px solid rgba(255,255,255,0.2); border-radius: 16px 16px 0 0; transition: transform 0.3s ease; transform: translateY(100%); pointer-events: auto; }
@@ -36,19 +36,19 @@
     
     .lib-item { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .lib-item-info { display: flex; align-items: center; gap: 10px; flex: 1; }
-    .lib-thumb { width: 44px; height: 44px; object-fit: contain; background: #000; border-radius: 6px; border: 1px solid #444; }
-    .lib-name-input { background: transparent; border: none; border-bottom: 1px dashed #666; color: #fff; font-size: 0.9rem; font-weight: bold; padding: 2px; width: 110px; }
-    .lib-name-input:focus { border-bottom-color: #00e676; outline: none; }
+    .lib-thumb { width: 44px; height: 44px; object-fit: contain; background: transparent; border-radius: 6px; border: 1px solid #444; }
+    .lib-name-input { background: transparent; border: none; border-bottom: 1px dashed #666; color: #fff; font-size: 0.9rem; font-weight: bold; padding: 2px; width: 140px; }
+    .lib-name-input:focus { border-bottom-color: #ff9800; outline: none; }
     .btn-del { background: #ff1744; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
 
-    /* Show Library Button (Centered Bottom when closed) */
-    #show-lib-btn { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); z-index: 15; background: #00e676; color: #000; padding: 10px 22px; border-radius: 20px; font-weight: bold; border: none; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: auto; }
+    /* Show Library Center Bottom Button */
+    #show-lib-btn { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); z-index: 15; background: #ff9800; color: #000; padding: 10px 22px; border-radius: 20px; font-weight: bold; border: none; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: auto; }
     #hide-lib-btn { align-self: center; background: rgba(255,255,255,0.15); color: #fff; border: none; padding: 4px 16px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-top: 4px; }
 
     /* HUD */
     #hud { position: absolute; bottom: 65px; left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
-    .btn { background: #00e676; color: #000; padding: 12px 24px; border-radius: 24px; font-weight: bold; border: none; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-    #status { font-size: 0.8rem; color: #00ffcc; background: rgba(0,0,0,0.8); padding: 4px 12px; border-radius: 10px; text-align: center; }
+    .btn { background: #ff9800; color: #000; padding: 12px 24px; border-radius: 24px; font-weight: bold; border: none; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    #status { font-size: 0.8rem; color: #ff9800; background: rgba(0,0,0,0.8); padding: 4px 12px; border-radius: 10px; text-align: center; }
 
     /* Confirmation Modal */
     #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
@@ -68,7 +68,7 @@
     <canvas id="gesture-canvas"></canvas>
   </div>
 
-  <!-- Top Controls Bar -->
+  <!-- Top Bar -->
   <div id="top-bar">
     <div class="control-card">
       <label class="swarm-toggle-label">
@@ -90,14 +90,13 @@
     </div>
   </div>
 
-  <!-- Show Library Center Bottom Button -->
   <button id="show-lib-btn">Show Butterfly Library 🦋</button>
 
   <!-- Collapsible Library Drawer -->
   <div id="library-drawer">
     <div id="drawer-header">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-weight:bold; color:#00ffcc; font-size:0.9rem;">Swarm Count Settings</span>
+        <span style="font-weight:bold; color:#ff9800; font-size:0.9rem;">Swarm Count Settings</span>
         <div style="display:flex; align-items:center; gap:6px;">
           <input type="range" id="swarm-slider" class="swarm-slider" min="1" max="20" value="10">
           <input type="number" id="max-slider-input" class="max-input-box" value="20" min="1" max="500">
@@ -130,8 +129,8 @@
     let isScanning = false, swarmModeActive = true;
     let boids = [], savedButterflies = [];
     let deleteTargetId = null;
+    let monarchTexture = null;
 
-    // 2-Finger Gesture State
     let touchState = {
       panX: 0, panY: 0,
       rotation: 0,
@@ -164,6 +163,75 @@
     const euler = new THREE.Euler();
     const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
+    // Generates Procedural Orange & Black Monarch Texture with Alpha=0 background
+    function generateMonarchData() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Clear transparent background
+      ctx.clearRect(0, 0, 512, 512);
+
+      // Draw Left Wing (Orange Fill)
+      ctx.fillStyle = '#ff6d00';
+      ctx.beginPath();
+      ctx.moveTo(250, 256);
+      ctx.bezierCurveTo(160, 80, 40, 100, 30, 220);
+      ctx.bezierCurveTo(20, 340, 140, 420, 250, 256);
+      ctx.fill();
+
+      // Draw Right Wing (Orange Fill)
+      ctx.beginPath();
+      ctx.moveTo(262, 256);
+      ctx.bezierCurveTo(352, 80, 472, 100, 482, 220);
+      ctx.bezierCurveTo(492, 340, 372, 420, 262, 256);
+      ctx.fill();
+
+      // Black Veins & Borders
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 14;
+
+      // Left Wing Outlines & Veins
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(250, 256); ctx.lineTo(100, 160);
+      ctx.moveTo(250, 256); ctx.lineTo(80, 250);
+      ctx.moveTo(250, 256); ctx.lineTo(130, 340);
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      // Right Wing Outlines & Veins
+      ctx.beginPath();
+      ctx.moveTo(262, 256); ctx.lineTo(412, 160);
+      ctx.moveTo(262, 256); ctx.lineTo(432, 250);
+      ctx.moveTo(262, 256); ctx.lineTo(382, 340);
+      ctx.stroke();
+
+      // Black Borders
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 18;
+      ctx.stroke();
+
+      // White Spots on Borders
+      ctx.fillStyle = '#fff';
+      const spots = [
+        [50, 200], [60, 150], [90, 120], [140, 100],
+        [462, 200], [452, 150], [422, 120], [372, 100]
+      ];
+      spots.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const threeTex = new THREE.CanvasTexture(canvas);
+      threeTex.needsUpdate = true;
+
+      return { dataUrl, threeTex };
+    }
+
     function init3D() {
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -180,45 +248,63 @@
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       document.getElementById('webgl-canvas').appendChild(renderer.domElement);
 
-      // Rotating Red Cube Mode Anchor
+      const monarchData = generateMonarchData();
+      monarchTexture = monarchData.threeTex;
+
+      // Red Cube Mode Anchor
       const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
       const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
       testCube = new THREE.Mesh(cubeGeo, cubeMat);
       testCube.position.copy(TARGET_CENTER_POS);
       scene.add(testCube);
 
-      // Swarm Container
+      // Swarm Group
       swarmGroup = new THREE.Group();
       scene.add(swarmGroup);
 
-      // Setup Initial Library Defaults
-      addDefaultButterfly();
+      addDefaultMonarch(monarchData.dataUrl);
       setupGestureListeners();
       setModeState(swarmToggle.checked);
 
       render();
     }
 
-    // 2-Wing Hinged Geometry (Flapping outward from center edge)
+    // 2 Non-Overlapping Hinged Wings using Transparent Monarch Texture
     function createHingedButterflyMesh() {
       const group = new THREE.Group();
-      const wingWidth = 0.14, wingHeight = 0.16;
+      const wingWidth = 0.16, wingHeight = 0.16;
 
       const wingMat = new THREE.MeshBasicMaterial({
-        color: 0x00ffcc,
+        map: monarchTexture,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.85,
+        alphaTest: 0.1,
         depthWrite: false
       });
 
+      // LEFT WING GEOMETRY (Hinged from Center-Right Edge)
       const leftGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
       leftGeo.translate(-wingWidth / 2, 0, 0);
+      
+      // Remap UVs to left half of texture
+      const leftUv = leftGeo.attributes.uv;
+      for (let i = 0; i < leftUv.count; i++) {
+        leftUv.setX(i, leftUv.getX(i) * 0.5);
+      }
+
       const leftWing = new THREE.Mesh(leftGeo, wingMat);
       leftWing.name = "leftWing";
 
+      // RIGHT WING GEOMETRY (Hinged from Center-Left Edge)
       const rightGeo = new THREE.PlaneGeometry(wingWidth, wingHeight);
       rightGeo.translate(wingWidth / 2, 0, 0);
+
+      // Remap UVs to right half of texture
+      const rightUv = rightGeo.attributes.uv;
+      for (let i = 0; i < rightUv.count; i++) {
+        rightUv.setX(i, 0.5 + rightUv.getX(i) * 0.5);
+      }
+
       const rightWing = new THREE.Mesh(rightGeo, wingMat);
       rightWing.name = "rightWing";
 
@@ -227,12 +313,12 @@
       return group;
     }
 
-    function addDefaultButterfly() {
+    function addDefaultMonarch(thumbUrl) {
       savedButterflies.push({
-        id: 'default-1',
-        name: 'Cyan Monarch',
+        id: 'monarch-default',
+        name: 'Monarch Butterfly',
         activeInSwarm: true,
-        thumb: null
+        thumb: thumbUrl
       });
       renderLibrary();
       updateSwarmCount(parseInt(swarmSlider.value));
@@ -246,7 +332,7 @@
         div.innerHTML = `
           <div class="lib-item-info">
             <input type="checkbox" ${item.activeInSwarm ? 'checked' : ''} data-id="${item.id}" class="lib-toggle">
-            ${item.thumb ? `<img src="${item.thumb}" class="lib-thumb">` : `<div class="lib-thumb" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🦋</div>`}
+            <img src="${item.thumb}" class="lib-thumb">
             <input type="text" value="${item.name}" data-id="${item.id}" class="lib-name-input">
           </div>
           <button class="btn-del" data-id="${item.id}">Delete</button>
@@ -254,7 +340,6 @@
         libraryGrid.appendChild(div);
       });
 
-      // Bind dynamic library events
       document.querySelectorAll('.lib-toggle').forEach(chk => {
         chk.addEventListener('change', (e) => {
           const id = e.target.getAttribute('data-id');
@@ -313,7 +398,7 @@
       }
     }
 
-    // Two-Finger Pinch, Rotate, Pan Gestures
+    // Touch Gesture Listeners
     function setupGestureListeners() {
       gestureCanvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
@@ -335,16 +420,13 @@
           const t1 = e.touches[0];
           const t2 = e.touches[1];
 
-          // 1. Scale (Pinch Distance)
           const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
           touchState.scaleRadius = Math.max(30, touchState.startRadius * (dist / touchState.startDist));
 
-          // 2. Rotation (Angle)
           const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
           touchState.rotation += (angle - touchState.startAngle);
           touchState.startAngle = angle;
 
-          // 3. Pan (Translation Midpoint)
           const midX = (t1.clientX + t2.clientX) / 2;
           const midY = (t1.clientY + t2.clientY) / 2;
           touchState.panX = midX + touchState.startPanX;
@@ -364,15 +446,13 @@
       gCtx.translate(cx, cy);
       gCtx.rotate(touchState.rotation);
 
-      // Crop Circle Overlay
       gCtx.beginPath();
       gCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
-      gCtx.strokeStyle = '#00e676';
+      gCtx.strokeStyle = '#ff9800';
       gCtx.setLineDash([6, 6]);
       gCtx.lineWidth = 2;
       gCtx.stroke();
 
-      // Red Centerline Guide
       gCtx.beginPath();
       gCtx.moveTo(0, -touchState.scaleRadius * 1.2);
       gCtx.lineTo(0, touchState.scaleRadius * 1.2);
@@ -471,7 +551,7 @@
       renderer.render(scene, camera);
     }
 
-    // UI Drawer & Modal Listeners
+    // Controls & Drawer Listeners
     showLibBtn.addEventListener('click', () => {
       libraryDrawer.classList.add('open');
       showLibBtn.style.display = 'none';
