@@ -86,8 +86,18 @@
     .btn { background: #ff9800; color: #000; padding: 12px 24px; border-radius: 24px; font-weight: bold; border: none; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
     #status { font-size: 0.8rem; color: #ff9800; background: rgba(0,0,0,0.8); padding: 4px 12px; border-radius: 10px; text-align: center; }
 
+    /* Dedicated Alignment & Refinement Editor Modal */
+    #editor-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 150; background: rgba(0,0,0,0.92); display: none; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 15px; pointer-events: auto; }
+    .editor-card { width: 100%; max-width: 380px; background: rgba(20,20,20,0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .editor-row { display: flex; flex-direction: column; gap: 4px; }
+    .editor-row label { font-size: 0.8rem; color: #ff9800; font-weight: bold; display: flex; justify-content: space-between; }
+    .editor-row input[type="range"] { width: 100%; accent-color: #ff9800; }
+    #editor-canvas { width: 280px; height: 280px; border: 1px dashed #ff9800; border-radius: 12px; background: #050505; }
+    .editor-btn-group { display: flex; gap: 12px; width: 100%; max-width: 380px; }
+    .editor-btn { flex: 1; padding: 12px; border-radius: 20px; border: none; font-weight: bold; font-size: 0.9rem; cursor: pointer; }
+
     /* Confirmation Modal */
-    #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
+    #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 200; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
     .modal-card { background: #1a1a1a; border: 1px solid #444; border-radius: 14px; padding: 20px; width: 280px; text-align: center; display: flex; flex-direction: column; gap: 15px; }
     .modal-btns { display: flex; gap: 10px; justify-content: center; }
     .modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold; font-size: 0.85rem; }
@@ -137,6 +147,28 @@
     <button id="start-btn" class="btn">Start AR Session 🎥</button>
   </div>
 
+  <!-- Refinement Editor Modal -->
+  <div id="editor-modal">
+    <div style="font-weight:bold; color:#ff9800; margin-top:10px;">Refine Captured Butterfly</div>
+    <canvas id="editor-canvas" width="512" height="512"></canvas>
+    
+    <div class="editor-card">
+      <div class="editor-row">
+        <label>Centerline Alignment <span id="center-val">50%</span></label>
+        <input type="range" id="center-slider" min="0" max="100" value="50">
+      </div>
+      <div class="editor-row">
+        <label>Transparency Threshold <span id="trans-val">15%</span></label>
+        <input type="range" id="trans-slider" min="0" max="100" value="15">
+      </div>
+    </div>
+
+    <div class="editor-btn-group">
+      <button id="editor-cancel" class="editor-btn" style="background:#444; color:#fff;">Discard</button>
+      <button id="editor-save" class="editor-btn" style="background:#ff9800; color:#000;">Add to Swarm 🦋</button>
+    </div>
+  </div>
+
   <!-- Confirmation Modal -->
   <div id="confirm-modal">
     <div class="modal-card">
@@ -155,10 +187,8 @@
     let deleteTargetId = null;
     let monarchTexture = null;
 
-    // Buffer canvas for processing camera captures
-    const captureBufferCanvas = document.createElement('canvas');
-    const captureBufferCtx = captureBufferCanvas.getContext('2d');
-
+    // Active gesture manipulator state
+    let isManipulatorActive = false;
     let touchState = {
       panX: 0, panY: 0,
       rotation: 0,
@@ -166,6 +196,13 @@
       startDist: 0, startAngle: 0,
       startPanX: 0, startPanY: 0, startRadius: 120
     };
+
+    // Buffer canvas for editor processing
+    const rawCaptureCanvas = document.createElement('canvas');
+    const rawCaptureCtx = rawCaptureCanvas.getContext('2d');
+    
+    const editorCanvas = document.getElementById('editor-canvas');
+    const editorCtx = editorCanvas.getContext('2d');
 
     const TARGET_CENTER_POS = new THREE.Vector3(0, -0.2, -1.2);
 
@@ -184,9 +221,15 @@
     const libraryDrawer = document.getElementById('library-drawer');
     const libraryGrid = document.getElementById('library-grid');
     
+    const editorModal = document.getElementById('editor-modal');
+    const centerSlider = document.getElementById('center-slider');
+    const transSlider = document.getElementById('trans-slider');
+    const editorSave = document.getElementById('editor-save');
+    const editorCancel = document.getElementById('editor-cancel');
+
     const confirmModal = document.getElementById('confirm-modal');
-    modalConfirm = document.getElementById('modal-confirm');
-    modalCancel = document.getElementById('modal-cancel');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
 
     const euler = new THREE.Euler();
     const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
@@ -284,7 +327,6 @@
       setupGestureListeners();
       setModeState(swarmToggle.checked);
 
-      drawGestureOverlay();
       render();
     }
 
@@ -333,38 +375,32 @@
       updateSwarmCount(parseInt(swarmSlider.value));
     }
 
-    function processCameraCapture() {
+    function openEditorWithCapture() {
       if (!video.videoWidth) return;
 
-      captureBufferCanvas.width = 512;
-      captureBufferCanvas.height = 512;
+      rawCaptureCanvas.width = 512;
+      rawCaptureCanvas.height = 512;
 
-      captureBufferCtx.save();
-      captureBufferCtx.fillStyle = '#000';
-      captureBufferCtx.fillRect(0, 0, 512, 512);
+      rawCaptureCtx.save();
+      rawCaptureCtx.fillStyle = '#ffffff';
+      rawCaptureCtx.fillRect(0, 0, 512, 512);
 
-      // Translate to canvas center & apply manipulator offset/rotation
-      captureBufferCtx.translate(256, 256);
-      
-      // Counter-rotate image based on manipulator line angle
-      captureBufferCtx.rotate(-touchState.rotation);
+      rawCaptureCtx.translate(256, 256);
+      rawCaptureCtx.rotate(-touchState.rotation);
 
-      // Scale based on radius crop
       const scale = 256 / Math.max(30, touchState.scaleRadius);
-      captureBufferCtx.scale(scale, scale);
+      rawCaptureCtx.scale(scale, scale);
 
-      // Apply screen-center pan offset
       const offsetX = -touchState.panX;
       const offsetY = -touchState.panY;
 
-      // Draw camera frame into alignment buffer
       const vW = video.videoWidth;
       const vH = video.videoHeight;
       const aspect = vW / vH;
       let drawW = 512;
       let drawH = 512 / aspect;
 
-      captureBufferCtx.drawImage(
+      rawCaptureCtx.drawImage(
         video,
         offsetX - drawW / 2,
         offsetY - drawH / 2,
@@ -372,34 +408,50 @@
         drawH
       );
 
-      // Apply Circular Crop Exclusion Mask
-      captureBufferCtx.globalCompositeOperation = 'destination-in';
-      captureBufferCtx.beginPath();
-      captureBufferCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
-      captureBufferCtx.fill();
+      // Mask using circle exclusion boundary
+      rawCaptureCtx.globalCompositeOperation = 'destination-in';
+      rawCaptureCtx.beginPath();
+      rawCaptureCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
+      rawCaptureCtx.fill();
+      rawCaptureCtx.restore();
 
-      captureBufferCtx.restore();
+      // Show editor view
+      editorModal.style.display = 'flex';
+      updateEditorPreview();
+    }
 
-      // Create new Three.js texture & thumbnail entry
-      const capturedDataUrl = captureBufferCanvas.toDataURL('image/png');
-      const newTex = new THREE.CanvasTexture(captureBufferCanvas);
-      newTex.needsUpdate = true;
+    function updateEditorPreview() {
+      editorCtx.clearRect(0, 0, 512, 512);
 
-      const newId = 'cap-' + Date.now();
-      savedButterflies.push({
-        id: newId,
-        name: `Custom Pattern #${savedButterflies.length + 1}`,
-        activeInSwarm: true,
-        thumb: capturedDataUrl,
-        texture: newTex
-      });
+      const centerShift = (parseInt(centerSlider.value) - 50) * 2; // -100 to 100 px shift
+      const thresholdVal = parseInt(transSlider.value) / 100;
 
-      renderLibrary();
-      updateSwarmCount(parseInt(swarmSlider.value));
+      editorCtx.save();
+      editorCtx.drawImage(rawCaptureCanvas, centerShift, 0);
 
-      // Visual flash indicator
-      gestureCanvas.style.background = 'rgba(255,255,255,0.4)';
-      setTimeout(() => { gestureCanvas.style.background = 'transparent'; }, 120);
+      // Perform Threshold Processing
+      const imgData = editorCtx.getImageData(0, 0, 512, 512);
+      const data = imgData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const brightness = (r + g + b) / (3 * 255);
+        if (brightness > (1 - thresholdVal)) {
+          data[i + 3] = 0; // Translucent Background
+        }
+      }
+
+      editorCtx.putImageData(imgData, 0, 0);
+
+      // Red Centerline Reference
+      editorCtx.strokeStyle = 'rgba(255, 23, 68, 0.6)';
+      editorCtx.lineWidth = 3;
+      editorCtx.beginPath();
+      editorCtx.moveTo(256, 0);
+      editorCtx.lineTo(256, 512);
+      editorCtx.stroke();
+
+      editorCtx.restore();
     }
 
     function renderLibrary() {
@@ -482,12 +534,14 @@
       gestureCanvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
           e.preventDefault();
+          isManipulatorActive = true;
           const t1 = e.touches[0], t2 = e.touches[1];
           touchState.startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
           touchState.startAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
           touchState.startPanX = touchState.panX - (t1.clientX + t2.clientX) / 2;
           touchState.startPanY = touchState.panY - (t1.clientY + t2.clientY) / 2;
           touchState.startRadius = touchState.scaleRadius;
+          drawGestureOverlay();
         }
       });
 
@@ -504,16 +558,34 @@
 
           const midX = (t1.clientX + t2.clientX) / 2;
           const midY = (t1.clientY + t2.clientY) / 2;
-          touchState.panX = midX + touchState.startPanX;
-          touchState.panY = midY + touchState.startPanY;
+          
+          let rawPanX = midX + touchState.startPanX;
+          let rawPanY = midY + touchState.startPanY;
+
+          // Safe Bounding Constraints (Keeps Center Point Screen-Clamped)
+          const margin = 20;
+          const screenHalfW = gestureCanvas.width / 2;
+          const screenHalfH = gestureCanvas.height / 2;
+
+          touchState.panX = Math.max(-screenHalfW + margin, Math.min(screenHalfW - margin, rawPanX));
+          touchState.panY = Math.max(-screenHalfH + margin, Math.min(screenHalfH - margin, rawPanY));
 
           drawGestureOverlay();
+        }
+      });
+
+      gestureCanvas.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+          isManipulatorActive = false;
+          gCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
         }
       });
     }
 
     function drawGestureOverlay() {
       gCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+      if (!isManipulatorActive) return;
+
       const cx = gestureCanvas.width / 2 + touchState.panX;
       const cy = gestureCanvas.height / 2 + touchState.panY;
 
@@ -641,7 +713,39 @@
       }
     });
 
-    camBtn.addEventListener('click', processCameraCapture);
+    camBtn.addEventListener('click', openEditorWithCapture);
+
+    centerSlider.addEventListener('input', (e) => {
+      document.getElementById('center-val').innerText = `${e.target.value}%`;
+      updateEditorPreview();
+    });
+
+    transSlider.addEventListener('input', (e) => {
+      document.getElementById('trans-val').innerText = `${e.target.value}%`;
+      updateEditorPreview();
+    });
+
+    editorSave.addEventListener('click', () => {
+      const dataUrl = editorCanvas.toDataURL('image/png');
+      const newTex = new THREE.CanvasTexture(editorCanvas);
+      newTex.needsUpdate = true;
+
+      savedButterflies.push({
+        id: 'cap-' + Date.now(),
+        name: `Custom Pattern #${savedButterflies.length + 1}`,
+        activeInSwarm: true,
+        thumb: dataUrl,
+        texture: newTex
+      });
+
+      renderLibrary();
+      updateSwarmCount(parseInt(swarmSlider.value));
+      editorModal.style.display = 'none';
+    });
+
+    editorCancel.addEventListener('click', () => {
+      editorModal.style.display = 'none';
+    });
 
     modalConfirm.addEventListener('click', () => {
       if (deleteTargetId) {
