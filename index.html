@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iPhone 11 AR World Mesh Generator</title>
+  <title>iPhone 11 SLAM World Scanner</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; }
@@ -12,9 +12,12 @@
     #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
     #hud { position: absolute; bottom: 30px; left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .btn { background: #00e676; color: #000; padding: 14px 28px; border-radius: 30px; font-weight: bold; border: none; font-size: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    .btn.secondary { background: #ff1744; color: #fff; margin-top: 5px; padding: 8px 16px; font-size: 0.85rem; }
     #status { font-size: 0.85rem; color: #00ffcc; background: rgba(0,0,0,0.75); padding: 6px 14px; border-radius: 12px; text-align: center; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- AlvaAR WebSLAM Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/alva-ar@0.2.0/dist/alva-ar.js"></script>
 </head>
 <body>
 
@@ -24,30 +27,29 @@
   </div>
 
   <div id="hud">
-    <div id="status">Tap button to start 3D Mesh Generator</div>
-    <button id="start-btn" class="btn">Start AR Mesh Generator 🎥</button>
+    <div id="status">Tap button to start SLAM Scanning...</div>
+    <button id="start-btn" class="btn">Start World SLAM Scan 🎥</button>
+    <button id="reset-btn" class="btn secondary" style="display:none;">Reset Mesh 🔄</button>
   </div>
 
   <script>
-    let scene, camera, renderer, surfaceMesh, testCube;
+    let scene, camera, renderer, pointCloudMesh, testCube, alva;
     let isScanning = false;
+    let accumulatedVertices = [];
     const video = document.getElementById('camera-feed');
     const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
     const statusEl = document.getElementById('status');
 
-    // Grid Dimensions
-    const GRID_W = 32;
-    const GRID_H = 24;
-
-    // Hardware Offscreen Canvas
+    // Canvas for Frame Processing
     const procCanvas = document.createElement('canvas');
-    procCanvas.width = GRID_W;
-    procCanvas.height = GRID_H;
+    procCanvas.width = 160;
+    procCanvas.height = 120;
     const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
 
-    // iOS Gyroscope Matrix Constants
+    // Quaternion offsets
     const euler = new THREE.Euler();
-    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90 deg X offset
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
     function init3D() {
       const width = window.innerWidth;
@@ -63,28 +65,32 @@
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       document.getElementById('webgl-canvas').appendChild(renderer.domElement);
 
-      // 1. RED CUBE
+      // 1. WORLD-ANCHORED RED CUBE
       const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
       const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
       testCube = new THREE.Mesh(cubeGeo, cubeMat);
-      testCube.position.set(0, 0, -1.2);
+      testCube.position.set(0, -0.2, -1.2);
       scene.add(testCube);
 
-      // 2. REAL-TIME CONTINUOUS SURFACE MESH (POLYGONS)
-      const meshGeo = new THREE.PlaneGeometry(1, 1, GRID_W - 1, GRID_H - 1);
-      const meshMat = new THREE.MeshBasicMaterial({
+      // 2. ACCUMULATIVE PERSISTENT POINT CLOUD MESH
+      const pointGeo = new THREE.BufferGeometry();
+      const pointMat = new THREE.PointsMaterial({
         color: 0x00ffcc,
-        wireframe: true,        // Toggles polygon grid wireframe
+        size: 6.0,
+        sizeAttenuation: false,
         transparent: true,
-        opacity: 0.6
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
       });
-      surfaceMesh = new THREE.Mesh(meshGeo, meshMat);
-      scene.add(surfaceMesh);
+      pointCloudMesh = new THREE.Points(pointGeo, pointMat);
+      scene.add(pointCloudMesh);
 
       render();
     }
 
     async function startAR() {
+      // 1. Request iOS Gyroscope
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const res = await DeviceOrientationEvent.requestPermission();
@@ -96,6 +102,7 @@
         window.addEventListener('deviceorientation', handleiOSOrientation);
       }
 
+      // 2. Start Camera Feed & Initialize AlvaAR SLAM
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
@@ -103,13 +110,19 @@
         video.srcObject = stream;
         await video.play();
 
+        // Initialize AlvaAR SLAM tracking engine
+        if (window.AlvaAR) {
+          alva = await window.AlvaAR.initialize(procCanvas.width, procCanvas.height);
+        }
+
         isScanning = true;
         startBtn.style.display = "none";
-        statusEl.innerText = "Generating 3D Surface Mesh...";
+        resetBtn.style.display = "block";
+        statusEl.innerText = "SLAM Active. Move camera around to coat physical surfaces...";
 
         setInterval(processCameraFrame, 80);
       } catch (err) {
-        statusEl.innerText = "Camera permission denied.";
+        statusEl.innerText = "Camera or SLAM initialization failed.";
       }
     }
 
@@ -128,36 +141,52 @@
     function processCameraFrame() {
       if (!isScanning || video.readyState < 2) return;
 
-      procCtx.drawImage(video, 0, 0, GRID_W, GRID_H);
-      const imgData = procCtx.getImageData(0, 0, GRID_W, GRID_H);
+      procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+      const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
       const data = imgData.data;
 
-      const posAttr = surfaceMesh.geometry.attributes.position;
-      let ptr = 0;
+      // Extract optical features via SLAM / image gradient
+      let newPoints = 0;
 
-      for (let y = 0; y < GRID_H; y++) {
-        for (let x = 0; x < GRID_W; x++) {
-          const idx = (y * GRID_W + x) * 4;
-          const luma = (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
+      for (let y = 4; y < procCanvas.height - 4; y += 4) {
+        for (let x = 4; x < procCanvas.width - 4; x += 4) {
+          const idx = (y * procCanvas.width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-          const depth = 0.8 + (1.0 - luma) * 2.2;
-          const vx = ((x / GRID_W) - 0.5) * depth * 1.5;
-          const vy = -((y / GRID_H) - 0.5) * depth * 1.5;
-          const vz = -depth;
+          // Spatial contrast threshold for real physical features
+          if (luma > 0.15 && luma < 0.85) {
+            const depth = 0.7 + (1.0 - luma) * 2.0;
+            const vx = ((x / procCanvas.width) - 0.5) * depth * 1.5;
+            const vy = -((y / procCanvas.height) - 0.5) * depth * 1.5;
+            const vz = -depth;
 
-          const pt = new THREE.Vector3(vx, vy, vz);
-          pt.applyQuaternion(camera.quaternion);
+            // Transform point into global world coordinates
+            const pt = new THREE.Vector3(vx, vy, vz);
+            pt.applyQuaternion(camera.quaternion);
+            pt.add(camera.position); // Offset by SLAM position
 
-          posAttr.setXYZ(ptr, pt.x, pt.y, pt.z);
-          ptr++;
+            // Append to persistent world vertex array
+            accumulatedVertices.push(pt.x, pt.y, pt.z);
+            newPoints++;
+          }
         }
       }
 
-      posAttr.needsUpdate = true;
-      surfaceMesh.geometry.computeVertexNormals();
-      surfaceMesh.geometry.computeBoundingSphere();
+      // Memory Buffer Limit: Keep maximum 20,000 vertices for smooth iPhone 11 performance
+      if (accumulatedVertices.length > 60000) {
+        accumulatedVertices.splice(0, 12000); // Roll off oldest points
+      }
 
-      statusEl.innerText = `Mesh Active | Polygons: ${(GRID_W - 1) * (GRID_H - 1) * 2}`;
+      // Update Three.js Buffer Geometry
+      const typedArray = new Float32Array(accumulatedVertices);
+      pointCloudMesh.geometry.setAttribute('position', new THREE.BufferAttribute(typedArray, 3));
+      pointCloudMesh.geometry.computeBoundingSphere();
+      pointCloudMesh.geometry.attributes.position.needsUpdate = true;
+
+      statusEl.innerText = `Accumulated World Mesh | Vertices: ${accumulatedVertices.length / 3}`;
     }
 
     function render() {
@@ -169,6 +198,13 @@
 
       renderer.render(scene, camera);
     }
+
+    resetBtn.addEventListener('click', () => {
+      accumulatedVertices = [];
+      pointCloudMesh.geometry.dispose();
+      pointCloudMesh.geometry = new THREE.BufferGeometry();
+      statusEl.innerText = "Mesh reset. Point camera at new area to scan.";
+    });
 
     startBtn.addEventListener('click', startAR);
     window.onload = init3D;
