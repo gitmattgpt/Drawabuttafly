@@ -15,7 +15,7 @@
     /* 2-Finger Gesture Overlay Canvas */
     #gesture-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 3; pointer-events: auto; }
 
-    /* Top Bar Control Cards */
+    /* Top Bar */
     #top-bar { 
       position: absolute; 
       top: calc(env(safe-area-inset-top, 0px) + 15px); 
@@ -30,69 +30,29 @@
     .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
     .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
 
-    /* Top Camera Button Group Container */
-    #top-cam-controls {
+    /* Guaranteed Visible Top Center Camera Capture Button */
+    #top-center-cam-btn {
       position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      top: calc(env(safe-area-inset-top, 0px) + 15px);
       left: 50%;
       transform: translateX(-50%);
       z-index: 999;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      pointer-events: auto;
-    }
-
-    /* Common Button Base Styling */
-    .top-action-btn {
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(8px);
-      color: #fff;
-      border: 2px solid rgba(255,255,255,0.3);
+      background: #ff9800;
+      color: #000;
+      border: 2px solid #fff;
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      pointer-events: auto;
-      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
-      user-select: none;
-    }
-
-    /* Main Center Capture Button */
-    #top-center-cam-btn {
       width: 58px;
       height: 58px;
       font-size: 1.6rem;
-      background: #ff9800;
-      color: #000;
-      border-color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 0.1s ease, background 0.2s ease;
     }
-    #top-center-cam-btn:active { transform: scale(0.92); background: #ffa726; }
-
-    /* Side Flashlight & Camera Flash Test Buttons */
-    .top-side-btn {
-      width: 44px;
-      height: 44px;
-      font-size: 1.2rem;
-    }
-    .top-side-btn:active { transform: scale(0.90); }
-
-    /* Highlight Active States for Toggles */
-    #flashlight-btn.active {
-      background: #ffb300;
-      border-color: #ffffff;
-      box-shadow: 0 0 15px rgba(255, 179, 0, 0.9), 0 4px 12px rgba(0,0,0,0.8);
-      transform: scale(1.05);
-    }
-
-    #cam-flash-btn.active {
-      background: #00e5ff;
-      border-color: #ffffff;
-      box-shadow: 0 0 15px rgba(0, 229, 255, 0.9), 0 4px 12px rgba(0,0,0,0.8);
-      transform: scale(1.05);
-    }
+    #top-center-cam-btn:active { transform: translateX(-50%) scale(0.92); background: #ffa726; }
 
     /* Collapsible Bottom Library Drawer */
     #library-drawer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 30; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); border-top: 1px solid rgba(255,255,255,0.2); border-radius: 16px 16px 0 0; transition: transform 0.3s ease; transform: translateY(100%); pointer-events: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -164,7 +124,7 @@
     <canvas id="gesture-canvas"></canvas>
   </div>
 
-  <!-- Top Control Panel -->
+  <!-- Top Bar -->
   <div id="top-bar">
     <div class="control-card">
       <label class="swarm-toggle-label">
@@ -173,12 +133,8 @@
     </div>
   </div>
 
-  <!-- Top Camera Control Group: Flashlight, Capture, Camera Flash -->
-  <div id="top-cam-controls">
-    <button id="flashlight-btn" class="top-action-btn top-side-btn" title="Flashlight Toggle">🔦</button>
-    <button id="top-center-cam-btn" class="top-action-btn" title="Capture Pattern">📷</button>
-    <button id="cam-flash-btn" class="top-action-btn top-side-btn" title="Camera Flash Snapshot Toggle">📸</button>
-  </div>
+  <!-- Camera Button -->
+  <button id="top-center-cam-btn" title="Capture Pattern">📷</button>
 
   <!-- Dynamic Bottom Toggle Button -->
   <button id="lib-toggle-btn">Show Library ▲</button>
@@ -241,10 +197,6 @@
     let deleteTargetId = null;
     let monarchTexture = null;
 
-    // Flash Mode States
-    let isFlashlightOn = false;
-    let isCameraFlashOn = false;
-
     let hasManipulatorBeenUsed = false;
     let isManipulating = false;
     let touchState = {
@@ -273,8 +225,6 @@
     const swarmSlider = document.getElementById('swarm-slider');
     const maxSliderInput = document.getElementById('max-slider-input');
     const camBtn = document.getElementById('top-center-cam-btn');
-    const flashlightBtn = document.getElementById('flashlight-btn');
-    const camFlashBtn = document.getElementById('cam-flash-btn');
     
     const libToggleBtn = document.getElementById('lib-toggle-btn');
     const libraryDrawer = document.getElementById('library-drawer');
@@ -451,57 +401,8 @@
       updateSwarmCount(parseInt(swarmSlider.value));
     }
 
-    // Apply Torch Control to Active Video Stream
-    async function applyHardwareTorch(enable) {
-      if (!video.srcObject) return false;
-      const track = video.srcObject.getVideoTracks()[0];
-      if (!track) return false;
-
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.torch) {
-        try {
-          await track.applyConstraints({
-            advanced: [{ torch: enable }]
-          });
-          return true;
-        } catch (err) {
-          console.warn("Torch failed to apply:", err);
-        }
-      }
-      return false;
-    }
-
-    // Toggle Flashlight Button Handler
-    flashlightBtn.addEventListener('click', async () => {
-      isFlashlightOn = !isFlashlightOn;
-      
-      const success = await applyHardwareTorch(isFlashlightOn);
-      if (isFlashlightOn) {
-        flashlightBtn.classList.add('active');
-        if (!success) console.log("Flashlight UI active (Hardware torch pending stream or unsupported on platform).");
-      } else {
-        flashlightBtn.classList.remove('active');
-      }
-    });
-
-    // Toggle Camera Flash Snapshot Mode Button Handler
-    camFlashBtn.addEventListener('click', () => {
-      isCameraFlashOn = !isCameraFlashOn;
-      if (isCameraFlashOn) {
-        camFlashBtn.classList.add('active');
-      } else {
-        camFlashBtn.classList.remove('active');
-      }
-    });
-
-    async function openEditorWithCapture() {
+    function openEditorWithCapture() {
       if (!video.videoWidth) return;
-
-      // Handle Camera Flash Trigger on Capture
-      if (isCameraFlashOn) {
-        await applyHardwareTorch(true);
-        await new Promise(resolve => setTimeout(resolve, 150)); // Brief flash delay
-      }
 
       rawCaptureCanvas.width = 512;
       rawCaptureCanvas.height = 512;
@@ -538,11 +439,6 @@
       rawCaptureCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
       rawCaptureCtx.fill();
       rawCaptureCtx.restore();
-
-      // Turn off flash if flashlight mode isn't actively enabled
-      if (isCameraFlashOn && !isFlashlightOn) {
-        await applyHardwareTorch(false);
-      }
 
       editorModal.style.display = 'flex';
       updateEditorPreview();
