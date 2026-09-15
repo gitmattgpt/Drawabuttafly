@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iPhone 11 SLAM World Scanner</title>
+  <title>Incremental AR Mesh Island</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; }
@@ -12,12 +12,11 @@
     #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
     #hud { position: absolute; bottom: 30px; left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .btn { background: #00e676; color: #000; padding: 14px 28px; border-radius: 30px; font-weight: bold; border: none; font-size: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-    .btn.secondary { background: #ff1744; color: #fff; margin-top: 5px; padding: 8px 16px; font-size: 0.85rem; }
-    #status { font-size: 0.85rem; color: #00ffcc; background: rgba(0,0,0,0.75); padding: 6px 14px; border-radius: 12px; text-align: center; }
+    .btn-action { background: #00b0ff; color: #fff; }
+    .btn-reset { background: #ff1744; color: #fff; font-size: 0.8rem; padding: 8px 16px; margin-top: 5px; }
+    #status { font-size: 0.85rem; color: #00ffcc; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 12px; text-align: center; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- AlvaAR WebSLAM Engine -->
-  <script src="https://cdn.jsdelivr.net/npm/alva-ar@0.2.0/dist/alva-ar.js"></script>
 </head>
 <body>
 
@@ -27,27 +26,33 @@
   </div>
 
   <div id="hud">
-    <div id="status">Tap button to start SLAM Scanning...</div>
-    <button id="start-btn" class="btn">Start World SLAM Scan 🎥</button>
-    <button id="reset-btn" class="btn secondary" style="display:none;">Reset Mesh 🔄</button>
+    <div id="status">Tap button to start AR Scanner</div>
+    <button id="start-btn" class="btn">Start AR Scanner 🎥</button>
+    <button id="lock-btn" class="btn btn-action" style="display:none;">Set Origin Triangle 🎯</button>
+    <button id="reset-btn" class="btn btn-reset" style="display:none;">Reset Island 🔄</button>
   </div>
 
   <script>
-    let scene, camera, renderer, pointCloudMesh, testCube, alva;
-    let isScanning = false;
-    let accumulatedVertices = [];
+    let scene, camera, renderer, testCube, targetTriangle, islandMesh;
+    let isScanning = false, isIslandLocked = false;
+    
+    // Island Mesh Geometry Arrays
+    let islandVertices = []; // [x, y, z, ...]
+    let islandIndices = [];  // [v1, v2, v3, ...]
+
     const video = document.getElementById('camera-feed');
     const startBtn = document.getElementById('start-btn');
+    const lockBtn = document.getElementById('lock-btn');
     const resetBtn = document.getElementById('reset-btn');
     const statusEl = document.getElementById('status');
 
-    // Canvas for Frame Processing
+    // Hardware Canvas for Image Feature Analysis
     const procCanvas = document.createElement('canvas');
-    procCanvas.width = 160;
-    procCanvas.height = 120;
+    procCanvas.width = 64;
+    procCanvas.height = 48;
     const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
 
-    // Quaternion offsets
+    // iOS Gyroscope Matrix Setup
     const euler = new THREE.Euler();
     const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
@@ -65,32 +70,47 @@
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       document.getElementById('webgl-canvas').appendChild(renderer.domElement);
 
-      // 1. WORLD-ANCHORED RED CUBE
-      const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+      // 1. WORLD-UP SPINNING RED CUBE
+      const cubeGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
       const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
       testCube = new THREE.Mesh(cubeGeo, cubeMat);
       testCube.position.set(0, -0.2, -1.2);
       scene.add(testCube);
 
-      // 2. ACCUMULATIVE PERSISTENT POINT CLOUD MESH
-      const pointGeo = new THREE.BufferGeometry();
-      const pointMat = new THREE.PointsMaterial({
-        color: 0x00ffcc,
-        size: 6.0,
-        sizeAttenuation: false,
+      // 2. TARGETING ORIGIN TRIANGLE (Stage 1 Target)
+      const targetGeo = new THREE.BufferGeometry();
+      const targetVertices = new Float32Array([
+        -0.2, -0.4, -1.2,
+         0.2, -0.4, -1.2,
+         0.0, -0.1, -1.2
+      ]);
+      targetGeo.setAttribute('position', new THREE.BufferAttribute(targetVertices, 3));
+      const targetMat = new THREE.MeshBasicMaterial({
+        color: 0x00e676,
+        wireframe: false,
+        side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
+        opacity: 0.5
       });
-      pointCloudMesh = new THREE.Points(pointGeo, pointMat);
-      scene.add(pointCloudMesh);
+      targetTriangle = new THREE.Mesh(targetGeo, targetMat);
+      scene.add(targetTriangle);
+
+      // 3. INCREMENTAL ISLAND MESH (Stage 2 Growth)
+      const islandGeo = new THREE.BufferGeometry();
+      const islandMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffcc,
+        wireframe: true,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.75
+      });
+      islandMesh = new THREE.Mesh(islandGeo, islandMat);
+      scene.add(islandMesh);
 
       render();
     }
 
     async function startAR() {
-      // 1. Request iOS Gyroscope
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const res = await DeviceOrientationEvent.requestPermission();
@@ -102,7 +122,6 @@
         window.addEventListener('deviceorientation', handleiOSOrientation);
       }
 
-      // 2. Start Camera Feed & Initialize AlvaAR SLAM
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
@@ -110,19 +129,14 @@
         video.srcObject = stream;
         await video.play();
 
-        // Initialize AlvaAR SLAM tracking engine
-        if (window.AlvaAR) {
-          alva = await window.AlvaAR.initialize(procCanvas.width, procCanvas.height);
-        }
-
         isScanning = true;
         startBtn.style.display = "none";
-        resetBtn.style.display = "block";
-        statusEl.innerText = "SLAM Active. Move camera around to coat physical surfaces...";
+        lockBtn.style.display = "block";
+        statusEl.innerText = "Aim target at floor/table & tap 'Set Origin Triangle'";
 
-        setInterval(processCameraFrame, 80);
+        setInterval(processCameraFrame, 100);
       } catch (err) {
-        statusEl.innerText = "Camera or SLAM initialization failed.";
+        statusEl.innerText = "Camera permission denied.";
       }
     }
 
@@ -138,55 +152,103 @@
       camera.quaternion.multiply(q1);
     }
 
+    // LOCK TARGET AND INITIALIZE ISLAND ORIGIN
+    function lockOriginTriangle() {
+      if (isIslandLocked) return;
+
+      // Extract current camera-space target triangle into persistent world-space
+      const posAttr = targetTriangle.geometry.attributes.position;
+      islandVertices = [];
+      islandIndices = [0, 1, 2];
+
+      for (let i = 0; i < 3; i++) {
+        const pt = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+        pt.applyQuaternion(camera.quaternion);
+        pt.add(camera.position);
+        islandVertices.push(pt.x, pt.y, pt.z);
+      }
+
+      isIslandLocked = true;
+      targetTriangle.visible = false; // Hide targeting reticle
+      lockBtn.style.display = "none";
+      resetBtn.style.display = "block";
+
+      updateIslandGeometry();
+      statusEl.innerText = "Origin Locked! Move phone across surface to grow island...";
+    }
+
     function processCameraFrame() {
       if (!isScanning || video.readyState < 2) return;
 
+      // STAGE 1: Update target triangle position relative to camera before lock
+      if (!isIslandLocked) {
+        // Target remains floating in front of camera lens ready for user lock
+        return;
+      }
+
+      // STAGE 2: Scan for candidate features near the active island boundary
       procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
       const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
       const data = imgData.data;
 
-      // Extract optical features via SLAM / image gradient
-      let newPoints = 0;
+      // Extract high-contrast candidate point from camera feed
+      let bestCandidate = null;
+      let minDistance = 0.5; // Candidate search radius (meters)
 
-      for (let y = 4; y < procCanvas.height - 4; y += 4) {
-        for (let x = 4; x < procCanvas.width - 4; x += 4) {
+      for (let y = 4; y < procCanvas.height - 4; y += 8) {
+        for (let x = 4; x < procCanvas.width - 4; x += 8) {
           const idx = (y * procCanvas.width + x) * 4;
-          const r = data[idx];
-          const g = data[idx + 1];
-          const b = data[idx + 2];
-          const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          const luma = (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
 
-          // Spatial contrast threshold for real physical features
-          if (luma > 0.15 && luma < 0.85) {
-            const depth = 0.7 + (1.0 - luma) * 2.0;
-            const vx = ((x / procCanvas.width) - 0.5) * depth * 1.5;
-            const vy = -((y / procCanvas.height) - 0.5) * depth * 1.5;
+          if (luma > 0.25 && luma < 0.75) {
+            const depth = 0.9 + (1.0 - luma) * 1.5;
+            const vx = ((x / procCanvas.width) - 0.5) * depth * 1.4;
+            const vy = -((y / procCanvas.height) - 0.5) * depth * 1.4;
             const vz = -depth;
 
-            // Transform point into global world coordinates
-            const pt = new THREE.Vector3(vx, vy, vz);
-            pt.applyQuaternion(camera.quaternion);
-            pt.add(camera.position); // Offset by SLAM position
+            const candPt = new THREE.Vector3(vx, vy, vz);
+            candPt.applyQuaternion(camera.quaternion);
+            candPt.add(camera.position);
 
-            // Append to persistent world vertex array
-            accumulatedVertices.push(pt.x, pt.y, pt.z);
-            newPoints++;
+            // Find nearest vertex on the existing island frontier
+            for (let vIdx = 0; vIdx < islandVertices.length; vIdx += 3) {
+              const islandPt = new THREE.Vector3(islandVertices[vIdx], islandVertices[vIdx+1], islandVertices[vIdx+2]);
+              const dist = candPt.distanceTo(islandPt);
+
+              // Candidate must be close enough to attach to edge, but far enough to expand the mesh
+              if (dist > 0.08 && dist < 0.35) {
+                bestCandidate = { point: candPt, nearIndex: vIdx / 3 };
+                break;
+              }
+            }
           }
+          if (bestCandidate) break;
         }
+        if (bestCandidate) break;
       }
 
-      // Memory Buffer Limit: Keep maximum 20,000 vertices for smooth iPhone 11 performance
-      if (accumulatedVertices.length > 60000) {
-        accumulatedVertices.splice(0, 12000); // Roll off oldest points
+      // Append new candidate vertex and expand the island mesh
+      if (bestCandidate) {
+        const newVIdx = islandVertices.length / 3;
+        islandVertices.push(bestCandidate.point.x, bestCandidate.point.y, bestCandidate.point.z);
+
+        // Connect new vertex to nearest edge to form a new triangle
+        const n1 = bestCandidate.nearIndex;
+        const n2 = (n1 + 1) % newVIdx;
+        islandIndices.push(n1, n2, newVIdx);
+
+        updateIslandGeometry();
+        statusEl.innerText = `Island Growing | Vertices: ${islandVertices.length / 3} | Triangles: ${islandIndices.length / 3}`;
       }
+    }
 
-      // Update Three.js Buffer Geometry
-      const typedArray = new Float32Array(accumulatedVertices);
-      pointCloudMesh.geometry.setAttribute('position', new THREE.BufferAttribute(typedArray, 3));
-      pointCloudMesh.geometry.computeBoundingSphere();
-      pointCloudMesh.geometry.attributes.position.needsUpdate = true;
-
-      statusEl.innerText = `Accumulated World Mesh | Vertices: ${accumulatedVertices.length / 3}`;
+    function updateIslandGeometry() {
+      const geo = islandMesh.geometry;
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(islandVertices, 3));
+      geo.setIndex(islandIndices);
+      geo.computeVertexNormals();
+      geo.computeBoundingSphere();
+      geo.attributes.position.needsUpdate = true;
     }
 
     function render() {
@@ -199,14 +261,20 @@
       renderer.render(scene, camera);
     }
 
-    resetBtn.addEventListener('click', () => {
-      accumulatedVertices = [];
-      pointCloudMesh.geometry.dispose();
-      pointCloudMesh.geometry = new THREE.BufferGeometry();
-      statusEl.innerText = "Mesh reset. Point camera at new area to scan.";
-    });
+    function resetIsland() {
+      isIslandLocked = false;
+      targetTriangle.visible = true;
+      islandVertices = [];
+      islandIndices = [];
+      updateIslandGeometry();
+      lockBtn.style.display = "block";
+      resetBtn.style.display = "none";
+      statusEl.innerText = "Aim target at surface & tap 'Set Origin Triangle'";
+    }
 
     startBtn.addEventListener('click', startAR);
+    lockBtn.addEventListener('click', lockOriginTriangle);
+    resetBtn.addEventListener('click', resetIsland);
     window.onload = init3D;
   </script>
 </body>
