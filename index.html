@@ -20,11 +20,29 @@
     .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
     .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
 
-    /* Creator Sliders */
-    #creator-controls { position: absolute; top: 75px; left: 15px; right: 15px; z-index: 10; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
-    .slider-row { background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 4px; }
-    .slider-row label { font-size: 0.75rem; color: #ff9800; font-weight: bold; display: flex; justify-content: space-between; }
-    .slider-row input[type="range"] { width: 100%; accent-color: #ff9800; }
+    /* Top Center Camera Capture Button */
+    #top-center-cam-btn {
+      position: absolute;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      background: rgba(255,152,0,0.9);
+      color: #000;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 52px;
+      height: 52px;
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 0.1s ease, background 0.2s ease;
+    }
+    #top-center-cam-btn:active { transform: translateX(-50%) scale(0.92); background: #ffa726; }
 
     /* Collapsible Bottom Library Drawer */
     #library-drawer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 20; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); border-top: 1px solid rgba(255,255,255,0.2); border-radius: 16px 16px 0 0; transition: transform 0.3s ease; transform: translateY(100%); pointer-events: auto; }
@@ -93,20 +111,10 @@
         <input type="checkbox" id="swarm-toggle" checked> Swarm Mode
       </label>
     </div>
-    <button id="capture-btn" class="btn" style="padding: 8px 16px; font-size:0.85rem;">Save Capture 📸</button>
   </div>
 
-  <!-- Creator Sliders -->
-  <div id="creator-controls">
-    <div class="slider-row">
-      <label>Centerline Alignment <span id="center-val">50%</span></label>
-      <input type="range" id="center-slider" min="0" max="100" value="50">
-    </div>
-    <div class="slider-row">
-      <label>Transparency Threshold <span id="trans-val">15%</span></label>
-      <input type="range" id="trans-slider" min="0" max="100" value="15">
-    </div>
-  </div>
+  <!-- Top Center Camera Capture Button -->
+  <button id="top-center-cam-btn" title="Capture Pattern">📷</button>
 
   <!-- Unified Bottom Floating Toggle Button -->
   <button id="lib-toggle-btn">Show Library ▲</button>
@@ -147,6 +155,10 @@
     let deleteTargetId = null;
     let monarchTexture = null;
 
+    // Buffer canvas for processing camera captures
+    const captureBufferCanvas = document.createElement('canvas');
+    const captureBufferCtx = captureBufferCanvas.getContext('2d');
+
     let touchState = {
       panX: 0, panY: 0,
       rotation: 0,
@@ -166,14 +178,15 @@
     const swarmToggle = document.getElementById('swarm-toggle');
     const swarmSlider = document.getElementById('swarm-slider');
     const maxSliderInput = document.getElementById('max-slider-input');
+    const camBtn = document.getElementById('top-center-cam-btn');
     
     const libToggleBtn = document.getElementById('lib-toggle-btn');
     const libraryDrawer = document.getElementById('library-drawer');
     const libraryGrid = document.getElementById('library-grid');
     
     const confirmModal = document.getElementById('confirm-modal');
-    const modalConfirm = document.getElementById('modal-confirm');
-    const modalCancel = document.getElementById('modal-cancel');
+    modalConfirm = document.getElementById('modal-confirm');
+    modalCancel = document.getElementById('modal-cancel');
 
     const euler = new THREE.Euler();
     const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
@@ -216,7 +229,6 @@
       ctx.lineWidth = 6;
       ctx.stroke();
 
-      // Borders
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 18;
       ctx.stroke();
@@ -272,15 +284,16 @@
       setupGestureListeners();
       setModeState(swarmToggle.checked);
 
+      drawGestureOverlay();
       render();
     }
 
-    function createHingedButterflyMesh() {
+    function createHingedButterflyMesh(texture) {
       const group = new THREE.Group();
       const wingWidth = 0.16, wingHeight = 0.16;
 
       const wingMat = new THREE.MeshBasicMaterial({
-        map: monarchTexture,
+        map: texture || monarchTexture,
         side: THREE.DoubleSide,
         transparent: true,
         alphaTest: 0.1,
@@ -313,10 +326,80 @@
         id: 'monarch-default',
         name: 'Monarch Butterfly',
         activeInSwarm: true,
-        thumb: thumbUrl
+        thumb: thumbUrl,
+        texture: monarchTexture
       });
       renderLibrary();
       updateSwarmCount(parseInt(swarmSlider.value));
+    }
+
+    function processCameraCapture() {
+      if (!video.videoWidth) return;
+
+      captureBufferCanvas.width = 512;
+      captureBufferCanvas.height = 512;
+
+      captureBufferCtx.save();
+      captureBufferCtx.fillStyle = '#000';
+      captureBufferCtx.fillRect(0, 0, 512, 512);
+
+      // Translate to canvas center & apply manipulator offset/rotation
+      captureBufferCtx.translate(256, 256);
+      
+      // Counter-rotate image based on manipulator line angle
+      captureBufferCtx.rotate(-touchState.rotation);
+
+      // Scale based on radius crop
+      const scale = 256 / Math.max(30, touchState.scaleRadius);
+      captureBufferCtx.scale(scale, scale);
+
+      // Apply screen-center pan offset
+      const offsetX = -touchState.panX;
+      const offsetY = -touchState.panY;
+
+      // Draw camera frame into alignment buffer
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const aspect = vW / vH;
+      let drawW = 512;
+      let drawH = 512 / aspect;
+
+      captureBufferCtx.drawImage(
+        video,
+        offsetX - drawW / 2,
+        offsetY - drawH / 2,
+        drawW,
+        drawH
+      );
+
+      // Apply Circular Crop Exclusion Mask
+      captureBufferCtx.globalCompositeOperation = 'destination-in';
+      captureBufferCtx.beginPath();
+      captureBufferCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
+      captureBufferCtx.fill();
+
+      captureBufferCtx.restore();
+
+      // Create new Three.js texture & thumbnail entry
+      const capturedDataUrl = captureBufferCanvas.toDataURL('image/png');
+      const newTex = new THREE.CanvasTexture(captureBufferCanvas);
+      newTex.needsUpdate = true;
+
+      const newId = 'cap-' + Date.now();
+      savedButterflies.push({
+        id: newId,
+        name: `Custom Pattern #${savedButterflies.length + 1}`,
+        activeInSwarm: true,
+        thumb: capturedDataUrl,
+        texture: newTex
+      });
+
+      renderLibrary();
+      updateSwarmCount(parseInt(swarmSlider.value));
+
+      // Visual flash indicator
+      gestureCanvas.style.background = 'rgba(255,255,255,0.4)';
+      setTimeout(() => { gestureCanvas.style.background = 'transparent'; }, 120);
     }
 
     function renderLibrary() {
@@ -370,7 +453,9 @@
       if (activeList.length === 0) return;
 
       for(let i = 0; i < count; i++) {
-        const bfly = createHingedButterflyMesh();
+        const sourcePattern = activeList[i % activeList.length];
+        const bfly = createHingedButterflyMesh(sourcePattern.texture);
+        
         const boid = {
           mesh: bfly,
           pos: TARGET_CENTER_POS.clone().add(new THREE.Vector3(
@@ -436,6 +521,7 @@
       gCtx.translate(cx, cy);
       gCtx.rotate(touchState.rotation);
 
+      // Crop Exclusion Boundary Circle
       gCtx.beginPath();
       gCtx.arc(0, 0, touchState.scaleRadius, 0, Math.PI * 2);
       gCtx.strokeStyle = '#ff9800';
@@ -443,12 +529,13 @@
       gCtx.lineWidth = 2;
       gCtx.stroke();
 
+      // Centerline Reference Alignment Guide
       gCtx.beginPath();
-      gCtx.moveTo(0, -touchState.scaleRadius * 1.2);
-      gCtx.lineTo(0, touchState.scaleRadius * 1.2);
+      gCtx.moveTo(0, -touchState.scaleRadius * 1.25);
+      gCtx.lineTo(0, touchState.scaleRadius * 1.25);
       gCtx.strokeStyle = '#ff1744';
       gCtx.setLineDash([]);
-      gCtx.lineWidth = 2;
+      gCtx.lineWidth = 2.5;
       gCtx.stroke();
 
       gCtx.restore();
@@ -554,6 +641,8 @@
       }
     });
 
+    camBtn.addEventListener('click', processCameraCapture);
+
     modalConfirm.addEventListener('click', () => {
       if (deleteTargetId) {
         savedButterflies = savedButterflies.filter(b => b.id !== deleteTargetId);
@@ -577,14 +666,6 @@
       if (val < 1) val = 1;
       swarmSlider.max = val;
       maxSliderInput.value = val;
-    });
-
-    document.getElementById('center-slider').addEventListener('input', (e) => {
-      document.getElementById('center-val').innerText = `${e.target.value}%`;
-    });
-
-    document.getElementById('trans-slider').addEventListener('input', (e) => {
-      document.getElementById('trans-val').innerText = `${e.target.value}%`;
     });
 
     startBtn.addEventListener('click', startAR);
