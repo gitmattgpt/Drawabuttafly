@@ -1,9 +1,3 @@
-I checked the previous code block, and there were two critical bugs in the script section that would cause JavaScript errors or unexpected behavior:
-1. Syntax Error (setLineDash)
-In drawGestureOverlay(), standard HTML5 Canvas uses setLineDash([]) with an array to clear dashes. Passing setLineDash() without arguments throws a TypeError in many mobile WebKit browsers, stopping rendering completely.
-2. Logical Bug (touchend listener missing)
-When you lifted your fingers, isManipulatorActive stayed true, so touching the screen with one finger afterward could cause the manipulator to jump unexpectedly or get stuck during drag calculations.
-Here is the fully corrected, production-ready code with those bugs fixed:
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,7 +15,7 @@ Here is the fully corrected, production-ready code with those bugs fixed:
     /* 2-Finger Gesture Overlay Canvas */
     #gesture-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 3; pointer-events: auto; }
 
-    /* Top Bar with Safe Area Insets */
+    /* Top Bar */
     #top-bar { 
       position: absolute; 
       top: calc(env(safe-area-inset-top, 0px) + 15px); 
@@ -36,19 +30,19 @@ Here is the fully corrected, production-ready code with those bugs fixed:
     .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
     .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
 
-    /* Safe Area Compliant Top Center Camera Capture Button */
+    /* Guaranteed Visible Top Center Camera Capture Button */
     #top-center-cam-btn {
-      position: absolute;
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 15px);
       left: 50%;
       transform: translateX(-50%);
-      z-index: 20;
-      background: rgba(255,152,0,0.95);
+      z-index: 999;
+      background: #ff9800;
       color: #000;
       border: 2px solid #fff;
       border-radius: 50%;
-      width: 54px;
-      height: 54px;
+      width: 58px;
+      height: 58px;
       font-size: 1.6rem;
       display: flex;
       align-items: center;
@@ -139,10 +133,10 @@ Here is the fully corrected, production-ready code with those bugs fixed:
     </div>
   </div>
 
-  <!-- Top Center Camera Capture Button -->
+  <!-- Camera Button -->
   <button id="top-center-cam-btn" title="Capture Pattern">📷</button>
 
-  <!-- Unified Bottom Floating Toggle Button -->
+  <!-- Dynamic Bottom Toggle Button -->
   <button id="lib-toggle-btn">Show Library ▲</button>
 
   <!-- Collapsible Library Drawer -->
@@ -203,7 +197,6 @@ Here is the fully corrected, production-ready code with those bugs fixed:
     let deleteTargetId = null;
     let monarchTexture = null;
 
-    // Active gesture manipulator state
     let hasManipulatorBeenUsed = false;
     let isManipulating = false;
     let touchState = {
@@ -214,7 +207,6 @@ Here is the fully corrected, production-ready code with those bugs fixed:
       startPanX: 0, startPanY: 0, startRadius: 120
     };
 
-    // Buffer canvas for editor processing
     const rawCaptureCanvas = document.createElement('canvas');
     const rawCaptureCtx = rawCaptureCanvas.getContext('2d');
     
@@ -634,7 +626,7 @@ Here is the fully corrected, production-ready code with those bugs fixed:
       gCtx.lineWidth = 2;
       gCtx.stroke();
 
-      // Centerline Reference Alignment Guide (Fixed dash array)
+      // Centerline Reference Alignment Guide
       gCtx.beginPath();
       gCtx.moveTo(0, -touchState.scaleRadius * 1.25);
       gCtx.lineTo(0, touchState.scaleRadius * 1.25);
@@ -809,4 +801,3 @@ Here is the fully corrected, production-ready code with those bugs fixed:
   </script>
 </body>
 </html>
-
