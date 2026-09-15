@@ -1,184 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iPhone 11 Turntable & AR Mesh</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; }
-    #viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
-    #camera-feed { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.3; }
-    #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-    #hud { position: absolute; bottom: 30px; left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-    .btn { background: #00e676; color: #000; padding: 14px 28px; border-radius: 30px; font-weight: bold; border: none; font-size: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-    #status { font-size: 0.85rem; color: #00ffcc; background: rgba(0,0,0,0.75); padding: 6px 14px; border-radius: 12px; text-align: center; }
-  </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-</head>
-<body>
+// World-Up Vector Alignment for iOS Safari
+const clock = new THREE.Clock();
 
-  <div id="viewport">
-    <video id="camera-feed" autoplay playsinline muted></video>
-    <div id="webgl-canvas"></div>
-  </div>
+function handleiOSOrientation(e) {
+  if (e.beta === null) return;
 
-  <div id="hud">
-    <div id="status">Tap button to start 360° Turntable & Spatial Scanner</div>
-    <button id="start-btn" class="btn">Start AR Scanner 🎥</button>
-  </div>
+  // Convert degrees to radians
+  const alpha = e.alpha ? THREE.MathUtils.degToRad(e.alpha) : 0;
+  const beta = e.beta ? THREE.MathUtils.degToRad(e.beta) : 0;
+  const gamma = e.gamma ? THREE.MathUtils.degToRad(e.gamma) : 0;
 
-  <script>
-    let scene, camera, renderer, pointMesh, testCube, cameraRig;
-    let isScanning = false;
-    let positions = [];
-    const video = document.getElementById('camera-feed');
-    const startBtn = document.getElementById('start-btn');
-    const statusEl = document.getElementById('status');
+  // Create quaternion directly from device motion
+  const orient = new THREE.Euler();
+  
+  // Account for portrait device orientation relative to camera direction
+  orient.set(beta, gamma, -alpha, 'YXZ');
+  
+  // Lock camera quaternion
+  camera.quaternion.setFromEuler(orient);
+}
 
-    // Dedicated offscreen processing canvas
-    const procCanvas = document.createElement('canvas');
-    procCanvas.width = 64;
-    procCanvas.height = 48;
-    const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+function render() {
+  requestAnimationFrame(render);
 
-    function init3D() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+  if (testCube) {
+    // Spin strictly around the WORLD Y-axis (Upward vector), not the cube's local tilted axis
+    testCube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), 0.02);
+  }
 
-      scene = new THREE.Scene();
-
-      // Camera hierarchy for mobile rotation decoupling
-      cameraRig = new THREE.Group();
-      scene.add(cameraRig);
-
-      camera = new THREE.PerspectiveCamera(60, width / height, 0.05, 100);
-      cameraRig.add(camera);
-
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      renderer.setSize(width, height);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      document.getElementById('webgl-canvas').appendChild(renderer.domElement);
-
-      // 1. TURNTABLE RED CUBE (Locked at world origin 0,0,-1.2)
-      const cubeGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
-      const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
-      testCube = new THREE.Mesh(cubeGeo, cubeMat);
-      
-      // Position cube 1.2 meters away in world space
-      testCube.position.set(0, 0, -1.2);
-      scene.add(testCube);
-
-      // 2. SPATIAL POINT CLOUD MESH
-      const pointGeo = new THREE.BufferGeometry();
-      const pointMat = new THREE.PointsMaterial({
-        color: 0x00ffcc,
-        size: 0.04,
-        depthWrite: false // Fixes WebKit rendering order bug
-      });
-      pointMesh = new THREE.Points(pointGeo, pointMat);
-      scene.add(pointMesh);
-
-      render();
-    }
-
-    async function startAR() {
-      // Request iOS Motion Sensor Permission
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const res = await DeviceOrientationEvent.requestPermission();
-          if (res === 'granted') {
-            window.addEventListener('deviceorientation', handleiOSOrientation);
-          }
-        } catch (e) { console.warn(e); }
-      } else {
-        window.addEventListener('deviceorientation', handleiOSOrientation);
-      }
-
-      // Initialize iPhone Camera Feed
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
-        });
-        video.srcObject = stream;
-        await video.play();
-
-        isScanning = true;
-        startBtn.style.display = "none";
-        statusEl.innerText = "Scanning Room... Moving camera around objects.";
-
-        // Run mesh scan loop
-        setInterval(processCameraFrame, 100);
-      } catch (err) {
-        statusEl.innerText = "Camera access denied or unreadable.";
-      }
-    }
-
-    function handleiOSOrientation(e) {
-      if (e.beta === null) return;
-
-      const alpha = e.alpha ? THREE.MathUtils.degToRad(e.alpha) : 0;
-      const beta = e.beta ? THREE.MathUtils.degToRad(e.beta) : 0;
-      const gamma = e.gamma ? THREE.MathUtils.degToRad(e.gamma) : 0;
-
-      // Apply physical iPhone orientation directly to Camera Rig
-      const euler = new THREE.Euler(beta, gamma, -alpha, 'YXZ');
-      camera.quaternion.setFromEuler(euler);
-    }
-
-    function processCameraFrame() {
-      if (!isScanning || video.readyState < 2) return;
-
-      // Force canvas size sync to ensure Safari transfers video frame pixels
-      procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
-      const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
-      const data = imgData.data;
-
-      positions = [];
-
-      for (let y = 0; y < procCanvas.height; y += 2) {
-        for (let x = 0; x < procCanvas.width; x += 2) {
-          const idx = (y * procCanvas.width + x) * 4;
-          const r = data[idx];
-          const g = data[idx + 1];
-          const b = data[idx + 2];
-
-          const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-          // Project luminance pixel grid into 3D camera space
-          const depth = 0.8 + (1.0 - luma) * 2.2;
-          const vx = ((x / procCanvas.width) - 0.5) * depth * 1.5;
-          const vy = -((y / procCanvas.height) - 0.5) * depth * 1.5;
-          const vz = -depth;
-
-          // Convert point into world space relative to camera orientation
-          const pt = new THREE.Vector3(vx, vy, vz);
-          pt.applyQuaternion(camera.quaternion);
-
-          positions.push(pt.x, pt.y, pt.z);
-        }
-      }
-
-      const typedArray = new Float32Array(positions);
-      pointMesh.geometry.setAttribute('position', new THREE.BufferAttribute(typedArray, 3));
-      pointMesh.geometry.attributes.position.needsUpdate = true;
-
-      statusEl.innerText = `360° Turntable Active | Mesh Vertices: ${positions.length / 3}`;
-    }
-
-    function render() {
-      requestAnimationFrame(render);
-
-      // 360° TURNTABLE ROTATION AROUND LOCAL VERTICAL Y-AXIS
-      if (testCube) {
-        testCube.rotation.y += 0.025; // Continuous 360° spin in place
-      }
-
-      renderer.render(scene, camera);
-    }
-
-    startBtn.addEventListener('click', startAR);
-    window.onload = init3D;
-  </script>
-</body>
-</html>
+  renderer.render(scene, camera);
+}
