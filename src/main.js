@@ -7,6 +7,7 @@
     let mindarAnchor = null;
     let mindarTargetUrl = null;
     let imageTrackingActive = false;
+    let mindarRuntimePromise = null;
 
     let hasManipulatorBeenUsed = false;
     let isManipulating = false;
@@ -418,17 +419,27 @@
       return savedButterflies.find((item) => item.activeInSwarm) || savedButterflies[0];
     }
 
+    function loadMindARRuntime() {
+      if (window.MINDAR?.IMAGE?.MindARThree) return Promise.resolve();
+      if (mindarRuntimePromise) return mindarRuntimePromise;
+      mindarRuntimePromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js';
+        script.onload = () => window.MINDAR?.IMAGE?.MindARThree
+          ? resolve()
+          : reject(new Error('MindAR runtime loaded without MindARThree'));
+        script.onerror = () => reject(new Error('MindAR runtime network load failed'));
+        document.head.appendChild(script);
+      });
+      return mindarRuntimePromise;
+    }
+
     async function startImageTracking() {
       const file = targetFile.files[0];
       if (!file) {
         statusEl.innerText = 'Choose a .mind target file first.';
         return;
       }
-      if (!window.MINDAR?.IMAGE?.MindARThree) {
-        statusEl.innerText = 'MindAR runtime could not be loaded.';
-        return;
-      }
-
       await stopImageTracking();
       stopLocalCamera();
       mindarTargetUrl = URL.createObjectURL(file);
@@ -442,6 +453,7 @@
       statusEl.innerText = 'Starting image tracking…';
 
       try {
+        await loadMindARRuntime();
         mindarThree = new MINDAR.IMAGE.MindARThree({
           container: mindarContainer,
           imageTargetSrc: mindarTargetUrl,
