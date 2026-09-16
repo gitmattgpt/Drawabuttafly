@@ -6,6 +6,7 @@
   <title>Butterfly Creator & AR Swarm</title>
   <link rel="stylesheet" href="src/styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
   <script type="importmap">
     {
       "imports": {
@@ -21,6 +22,7 @@
     <div id="webgl-canvas"></div>
     <canvas id="gesture-canvas"></canvas>
   </div>
+  <div id="mindar-container" aria-hidden="true"></div>
 
   <!-- Top Bar -->
   <div id="top-bar">
@@ -53,6 +55,13 @@
   <div id="hud">
     <div id="status">Sensors Initializing...</div>
     <button id="start-btn" class="btn">Start AR Session 🎥</button>
+    <div class="tracking-controls">
+      <label class="target-file-label">Load .mind target
+        <input id="target-file" type="file" accept=".mind,application/octet-stream">
+      </label>
+      <button id="track-target-btn" class="btn tracking-btn" disabled>Track Generated Target</button>
+      <button id="stop-tracking-btn" class="btn secondary tracking-btn" hidden>Stop Image Tracking</button>
+    </div>
   </div>
 
   <!-- Refinement Editor Modal -->

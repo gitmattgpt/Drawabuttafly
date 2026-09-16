@@ -5,6 +5,10 @@
     let boids = [], savedButterflies = [];
     let deleteTargetId = null;
     let monarchTexture = null;
+    let mindarThree = null;
+    let mindarAnchor = null;
+    let mindarTargetUrl = null;
+    let imageTrackingActive = false;
 
     let hasManipulatorBeenUsed = false;
     let isManipulating = false;
@@ -34,6 +38,10 @@
     const swarmSlider = document.getElementById('swarm-slider');
     const maxSliderInput = document.getElementById('max-slider-input');
     const camBtn = document.getElementById('top-center-cam-btn');
+    const mindarContainer = document.getElementById('mindar-container');
+    const targetFile = document.getElementById('target-file');
+    const trackTargetBtn = document.getElementById('track-target-btn');
+    const stopTrackingBtn = document.getElementById('stop-tracking-btn');
     
     const libToggleBtn = document.getElementById('lib-toggle-btn');
     const libraryDrawer = document.getElementById('library-drawer');
@@ -399,6 +407,98 @@
       }
     }
 
+    function stopLocalCamera() {
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+      }
+      isScanning = false;
+    }
+
+    function getTrackingButterfly() {
+      return savedButterflies.find((item) => item.activeInSwarm) || savedButterflies[0];
+    }
+
+    async function startImageTracking() {
+      const file = targetFile.files[0];
+      if (!file) {
+        statusEl.innerText = 'Choose a .mind target file first.';
+        return;
+      }
+      if (!window.MINDAR?.IMAGE?.MindARThree) {
+        statusEl.innerText = 'MindAR runtime could not be loaded.';
+        return;
+      }
+
+      await stopImageTracking();
+      stopLocalCamera();
+      mindarTargetUrl = URL.createObjectURL(file);
+      imageTrackingActive = true;
+      mindarContainer.classList.add('active');
+      mindarContainer.setAttribute('aria-hidden', 'false');
+      document.getElementById('viewport').style.visibility = 'hidden';
+      trackTargetBtn.hidden = true;
+      stopTrackingBtn.hidden = false;
+      startBtn.style.display = 'none';
+      statusEl.innerText = 'Starting image tracking…';
+
+      try {
+        mindarThree = new MINDAR.IMAGE.MindARThree({
+          container: mindarContainer,
+          imageTargetSrc: mindarTargetUrl,
+          uiLoading: 'no', uiScanning: 'no', uiError: 'no',
+          filterMinCF: 0.0001, filterBeta: 0.001,
+          warmupTolerance: 5, missTolerance: 5
+        });
+        mindarAnchor = mindarThree.addAnchor(0);
+        const butterfly = getTrackingButterfly();
+        if (butterfly) {
+          const mesh = createHingedButterflyMesh(butterfly.texture);
+          mesh.scale.setScalar(2.2);
+          mesh.position.set(0, 0.08, 0.02);
+          mindarAnchor.group.add(mesh);
+        }
+        mindarAnchor.onTargetFound = () => { statusEl.innerText = 'Image target found — butterfly anchored.'; };
+        mindarAnchor.onTargetLost = () => { statusEl.innerText = 'Searching for image target…'; };
+        await mindarThree.start();
+        const { renderer, scene: trackingScene, camera: trackingCamera } = mindarThree;
+        renderer.setAnimationLoop(() => renderer.render(trackingScene, trackingCamera));
+        statusEl.innerText = 'Searching for image target…';
+      } catch (error) {
+        console.error('MindAR tracking failed:', error);
+        statusEl.innerText = 'Could not start image tracking. Check the .mind file and camera permission.';
+        await stopImageTracking();
+      }
+    }
+
+    async function stopImageTracking() {
+      if (mindarThree) {
+        mindarThree.renderer?.setAnimationLoop(null);
+        try {
+          if (mindarThree.controller && mindarThree.video) mindarThree.stop();
+        } catch (error) {
+          console.warn('MindAR shutdown warning:', error);
+        }
+        mindarThree.renderer?.domElement.remove();
+        mindarThree.cssRenderer?.domElement.remove();
+        mindarThree.video?.remove();
+      }
+      mindarThree = null;
+      mindarAnchor = null;
+      imageTrackingActive = false;
+      mindarContainer.classList.remove('active');
+      mindarContainer.setAttribute('aria-hidden', 'true');
+      document.getElementById('viewport').style.visibility = 'visible';
+      trackTargetBtn.hidden = false;
+      stopTrackingBtn.hidden = true;
+      startBtn.style.display = 'block';
+      if (mindarTargetUrl) {
+        URL.revokeObjectURL(mindarTargetUrl);
+        mindarTargetUrl = null;
+      }
+      statusEl.innerText = 'Image tracking stopped.';
+    }
+
     function renderLibrary() {
       libraryGrid.innerHTML = '';
       savedButterflies.forEach((item) => {
@@ -721,5 +821,11 @@
       maxSliderInput.value = val;
     });
 
+    targetFile.addEventListener('change', () => {
+      trackTargetBtn.disabled = !targetFile.files.length;
+      if (targetFile.files.length) statusEl.innerText = 'Target loaded. Start image tracking when ready.';
+    });
+    trackTargetBtn.addEventListener('click', startImageTracking);
+    stopTrackingBtn.addEventListener('click', stopImageTracking);
     startBtn.addEventListener('click', startAR);
     window.onload = init3D;
