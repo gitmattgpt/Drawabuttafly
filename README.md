@@ -8,13 +8,29 @@ A camera-based butterfly creator and AR-style swarm prototype.
 - `src/styles.css` — styles for the active application.
 - `src/main.js` — active application logic.
 - `archive/legacy/` — stale scanner-era files retained for reference only; they are not loaded by the application.
+- `AR-TRACKING-PLAN.md` — staged plan for image targets, printed markers, hand landmarks, and optional surface placement.
 
-## Running locally
+## Local development
 
-Serve the repository over HTTP or HTTPS because camera access requires a secure context (HTTPS, or localhost during local development). For example:
+Installations are not required for the current static prototype. The development server uses Python's standard library and disables caching so camera and AR changes are immediately testable.
 
 ```bash
-python3 -m http.server 8000
+npm run dev
 ```
 
-Then open `http://localhost:8000/` in a browser that supports camera access and device orientation APIs.
+Then open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in a browser. Camera access is allowed on localhost. Stop the server with `Ctrl+C`.
+
+The following commands are also available:
+
+```bash
+npm run check   # JavaScript and Python syntax checks
+npm run serve   # basic Python static server with caching enabled
+```
+
+For testing on a phone, use a Vercel preview deployment. Connect the GitHub repository to Vercel and deploy the `best-version` branch, or run `vercel` from the repository root if the Vercel CLI is configured. Use the preview URL rather than an unsecured LAN IP because camera and WebXR features require a secure context on supported browsers.
+
+## Browser test notes
+
+Allow camera and motion permissions. Test on a physical phone for camera behavior; desktop emulation cannot validate device orientation, camera framing, or hand-tracking performance. Keep the camera image well lit and ensure that the full test marker remains visible when marker tracking is added.
+
+See [AR-TRACKING-PLAN.md](AR-TRACKING-PLAN.md) before adding tracking libraries or changing the capture workflow.
