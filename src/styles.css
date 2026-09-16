@@ -1,0 +1,109 @@
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: -apple-system, sans-serif; touch-action: none; }
+    
+    #viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+    #camera-feed { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0.35; }
+    #webgl-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+    
+    /* 2-Finger Gesture Overlay Canvas */
+    #gesture-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 3; pointer-events: auto; }
+
+    /* Top Bar */
+    #top-bar { 
+      position: absolute; 
+      top: calc(env(safe-area-inset-top, 0px) + 15px); 
+      left: 15px; 
+      right: 15px; 
+      z-index: 10; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      pointer-events: auto; 
+    }
+    .control-card { background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+    .swarm-toggle-label { font-size: 0.85rem; font-weight: bold; color: #ff9800; display: flex; align-items: center; gap: 6px; }
+
+    /* Guaranteed Visible Top Center Camera Capture Button */
+    #top-center-cam-btn {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 15px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      background: #ff9800;
+      color: #000;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 58px;
+      height: 58px;
+      font-size: 1.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 0.1s ease, background 0.2s ease;
+    }
+    #top-center-cam-btn:active { transform: translateX(-50%) scale(0.92); background: #ffa726; }
+
+    /* Collapsible Bottom Library Drawer */
+    #library-drawer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 30; background: rgba(10,10,10,0.95); backdrop-filter: blur(15px); border-top: 1px solid rgba(255,255,255,0.2); border-radius: 16px 16px 0 0; transition: transform 0.3s ease; transform: translateY(100%); pointer-events: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+    #library-drawer.open { transform: translateY(0); }
+    
+    /* Dynamic Floating Toggle Button */
+    #lib-toggle-btn { 
+      position: absolute; 
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); 
+      left: 50%; 
+      transform: translateX(-50%); 
+      z-index: 35; 
+      background: rgba(255,255,255,0.15); 
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; 
+      padding: 6px 18px; 
+      border-radius: 14px; 
+      font-size: 0.8rem; 
+      font-weight: bold; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+      transition: bottom 0.3s ease; 
+      pointer-events: auto; 
+    }
+
+    #drawer-header { padding: 14px 15px 10px 15px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+    .swarm-slider { width: 100px; accent-color: #ff9800; }
+    .max-input-box { width: 44px; height: 28px; background: #222; border: 1px solid #ff9800; color: #fff; border-radius: 6px; text-align: center; font-size: 16px; font-weight: bold; }
+
+    #library-grid { display: flex; flex-direction: column; gap: 8px; padding: 15px; max-height: 250px; overflow-y: auto; }
+    
+    .lib-item { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .lib-item-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .lib-thumb { width: 44px; height: 44px; object-fit: contain; background: transparent; border-radius: 6px; border: 1px solid #444; }
+    .lib-name-input { background: transparent; border: none; border-bottom: 1px dashed #666; color: #fff; font-size: 0.9rem; font-weight: bold; padding: 2px; width: 140px; }
+    .lib-name-input:focus { border-bottom-color: #ff9800; outline: none; }
+    .btn-del { background: #ff1744; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
+
+    /* HUD */
+    #hud { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 65px); left: 0; width: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
+    .btn { background: #ff9800; color: #000; padding: 12px 24px; border-radius: 24px; font-weight: bold; border: none; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    #status { font-size: 0.8rem; color: #ff9800; background: rgba(0,0,0,0.8); padding: 4px 12px; border-radius: 10px; text-align: center; }
+
+    /* Dedicated Alignment & Refinement Editor Modal */
+    #editor-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 150; background: rgba(0,0,0,0.92); display: none; flex-direction: column; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top, 0px) + 20px) 15px calc(env(safe-area-inset-bottom, 0px) + 20px) 15px; pointer-events: auto; }
+    .editor-card { width: 100%; max-width: 380px; background: rgba(20,20,20,0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .editor-row { display: flex; flex-direction: column; gap: 4px; }
+    .editor-row label { font-size: 0.8rem; color: #ff9800; font-weight: bold; display: flex; justify-content: space-between; }
+    .editor-row input[type="range"] { width: 100%; accent-color: #ff9800; }
+    #editor-canvas { width: 280px; height: 280px; border: 1px dashed #ff9800; border-radius: 12px; background: #050505; }
+    .editor-btn-group { display: flex; gap: 12px; width: 100%; max-width: 380px; }
+    .editor-btn { flex: 1; padding: 12px; border-radius: 20px; border: none; font-weight: bold; font-size: 0.9rem; cursor: pointer; }
+
+    /* Confirmation Modal */
+    #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 200; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
+    .modal-card { background: #1a1a1a; border: 1px solid #444; border-radius: 14px; padding: 20px; width: 280px; text-align: center; display: flex; flex-direction: column; gap: 15px; }
+    .modal-btns { display: flex; gap: 10px; justify-content: center; }
+    .modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold; font-size: 0.85rem; }
+    .modal-btn-confirm { background: #ff1744; color: #fff; }
+    .modal-btn-cancel { background: #444; color: #fff; }
+  </style>
