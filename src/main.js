@@ -1,5 +1,3 @@
-    import { Compiler as MindARCompiler } from 'mind-ar-compiler';
-
     let scene, camera, renderer, testCube, swarmGroup;
     let isScanning = false, swarmModeActive = true;
     let boids = [], savedButterflies = [];
@@ -384,6 +382,7 @@
       targetCompile.disabled = true;
       targetProgress.textContent = 'Preparing target image…';
       try {
+        const { Compiler: MindARCompiler } = await import('mind-ar-compiler');
         const compiler = new MindARCompiler();
         const image = await canvasToImage(editorCanvas);
         const dataList = await compiler.compileImageTargets([image], (progress) => {
