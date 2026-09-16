@@ -1,3 +1,4 @@
+    import { Compiler as MindARCompiler } from 'mind-ar-compiler';
 
     let scene, camera, renderer, testCube, swarmGroup;
     let isScanning = false, swarmModeActive = true;
@@ -41,6 +42,12 @@
     const editorModal = document.getElementById('editor-modal');
     const centerSlider = document.getElementById('center-slider');
     const transSlider = document.getElementById('trans-slider');
+    const targetQuality = document.getElementById('target-quality');
+    const targetQualityTitle = document.getElementById('target-quality-title');
+    const targetQualityScore = document.getElementById('target-quality-score');
+    const targetQualityDetails = document.getElementById('target-quality-details');
+    const targetCompile = document.getElementById('target-compile');
+    const targetProgress = document.getElementById('target-progress');
     const editorSave = document.getElementById('editor-save');
     const editorCancel = document.getElementById('editor-cancel');
 
@@ -282,6 +289,114 @@
       editorCtx.stroke();
 
       editorCtx.restore();
+      updateTargetQuality();
+    }
+
+    function analyzeTargetQuality() {
+      const sampleSize = 96;
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = sampleSize;
+      sampleCanvas.height = sampleSize;
+      const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+      sampleCtx.drawImage(editorCanvas, 0, 0, sampleSize, sampleSize);
+      const pixels = sampleCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+      const luminance = new Float32Array(sampleSize * sampleSize);
+      let sum = 0;
+      let opaque = 0;
+
+      for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+        const alpha = pixels[i + 3] / 255;
+        const value = (0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]) / 255;
+        luminance[p] = value;
+        sum += value;
+        if (alpha > 0.2) opaque++;
+      }
+
+      const mean = sum / luminance.length;
+      let variance = 0;
+      let edgeSum = 0;
+      let edgeCount = 0;
+      for (let y = 0; y < sampleSize; y++) {
+        for (let x = 0; x < sampleSize; x++) {
+          const index = y * sampleSize + x;
+          const delta = luminance[index] - mean;
+          variance += delta * delta;
+          if (x > 0) {
+            edgeSum += Math.abs(luminance[index] - luminance[index - 1]);
+            edgeCount++;
+          }
+          if (y > 0) {
+            edgeSum += Math.abs(luminance[index] - luminance[index - sampleSize]);
+            edgeCount++;
+          }
+        }
+      }
+
+      const contrast = Math.sqrt(variance / luminance.length);
+      const edgeDensity = edgeSum / edgeCount;
+      const coverage = opaque / luminance.length;
+      const score = Math.round(Math.min(100, Math.max(0,
+        contrast * 180 + edgeDensity * 300 + Math.min(coverage, 0.85) * 12
+      )));
+      const reasons = [];
+      if (contrast < 0.12) reasons.push('low contrast');
+      if (edgeDensity < 0.045) reasons.push('few distinctive edges');
+      if (coverage < 0.35) reasons.push('mostly empty or transparent');
+
+      return { score, reasons };
+    }
+
+    function updateTargetQuality() {
+      const result = analyzeTargetQuality();
+      targetQuality.className = 'target-quality ' + (result.score >= 55 ? 'good' : result.score >= 35 ? 'warn' : 'poor');
+      targetQualityTitle.textContent = result.score >= 55 ? 'Good image-target candidate' : result.score >= 35 ? 'Borderline image-target candidate' : 'Low-detail image target';
+      targetQualityScore.textContent = `Quality score: ${result.score}/100`;
+      targetQualityDetails.textContent = result.reasons.length
+        ? `${result.reasons.join(', ')}. Add texture, contrast, and keep the full crop visible.`
+        : 'Distinctive contrast and edges detected. Keep the full crop visible when tracking.';
+      return result;
+    }
+
+    function canvasToImage(canvas) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = canvas.toDataURL('image/png');
+      });
+    }
+
+    async function compileMindARTarget() {
+      const quality = updateTargetQuality();
+      if (quality.score < 25) {
+        targetProgress.textContent = 'Improve the crop before compiling this target.';
+        return;
+      }
+
+      targetCompile.disabled = true;
+      targetProgress.textContent = 'Preparing target image…';
+      try {
+        const compiler = new MindARCompiler();
+        const image = await canvasToImage(editorCanvas);
+        const dataList = await compiler.compileImageTargets([image], (progress) => {
+          targetProgress.textContent = `Compiling image target… ${progress.toFixed(0)}%`;
+        });
+        const buffer = await compiler.exportData();
+        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `butterfly-target-${Date.now()}.mind`;
+        link.click();
+        URL.revokeObjectURL(url);
+        const pointCount = dataList?.[0]?.trackingData?.[0]?.points?.length || 0;
+        targetProgress.textContent = `Target ready and downloaded${pointCount ? ` (${pointCount} tracking points)` : ''}.`;
+      } catch (error) {
+        console.error('MindAR target compilation failed:', error);
+        targetProgress.textContent = 'Target compilation failed. Try a larger, sharper, more detailed crop.';
+      } finally {
+        targetCompile.disabled = false;
+      }
     }
 
     function renderLibrary() {
@@ -557,6 +672,8 @@
       updateEditorPreview();
     });
 
+    targetCompile.addEventListener('click', compileMindARTarget);
+
     editorSave.addEventListener('click', () => {
       const dataUrl = editorCanvas.toDataURL('image/png');
       const newTex = new THREE.CanvasTexture(editorCanvas);
@@ -606,4 +723,3 @@
 
     startBtn.addEventListener('click', startAR);
     window.onload = init3D;
-

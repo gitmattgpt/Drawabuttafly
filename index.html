@@ -6,6 +6,13 @@
   <title>Butterfly Creator & AR Swarm</title>
   <link rel="stylesheet" href="src/styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "mind-ar-compiler": "https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/src/image-target/compiler.js"
+      }
+    }
+  </script>
 </head>
 <body>
 
@@ -62,12 +69,19 @@
         <label>Transparency Threshold <span id="trans-val">15%</span></label>
         <input type="range" id="trans-slider" min="0" max="100" value="15">
       </div>
+      <div id="target-quality" class="target-quality" aria-live="polite">
+        <strong id="target-quality-title">Target quality not checked</strong>
+        <span id="target-quality-score"></span>
+        <span id="target-quality-details">Adjust the crop to analyze image-tracking detail.</span>
+      </div>
     </div>
 
     <div class="editor-btn-group">
       <button id="editor-cancel" class="editor-btn" style="background:#444; color:#fff;">Discard</button>
+      <button id="target-compile" class="editor-btn" style="background:#00bcd4; color:#000;">Create Image Target</button>
       <button id="editor-save" class="editor-btn" style="background:#ff9800; color:#000;">Add to Swarm 🦋</button>
     </div>
+    <div id="target-progress" class="target-progress" aria-live="polite"></div>
   </div>
 
   <!-- Confirmation Modal -->
@@ -81,6 +95,6 @@
     </div>
   </div>
 
-  <script src="src/main.js"></script>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>

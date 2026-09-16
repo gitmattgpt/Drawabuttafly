@@ -98,6 +98,13 @@
     #editor-canvas { width: 280px; height: 280px; border: 1px dashed #ff9800; border-radius: 12px; background: #050505; }
     .editor-btn-group { display: flex; gap: 12px; width: 100%; max-width: 380px; }
     .editor-btn { flex: 1; padding: 12px; border-radius: 20px; border: none; font-weight: bold; font-size: 0.9rem; cursor: pointer; }
+    .editor-btn:disabled { opacity: 0.55; cursor: wait; }
+    .target-quality { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 8px; font-size: 0.74rem; line-height: 1.25; background: rgba(255,255,255,0.06); border-left: 4px solid #888; }
+    .target-quality strong { font-size: 0.8rem; }
+    .target-quality.good { border-left-color: #00c853; background: rgba(0,200,83,0.12); }
+    .target-quality.warn { border-left-color: #ffb300; background: rgba(255,179,0,0.12); }
+    .target-quality.poor { border-left-color: #ff1744; background: rgba(255,23,68,0.12); }
+    .target-progress { min-height: 1.1em; color: #00bcd4; font-size: 0.78rem; text-align: center; }
 
     /* Confirmation Modal */
     #confirm-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 200; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; pointer-events: auto; }
@@ -106,4 +113,3 @@
     .modal-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: bold; font-size: 0.85rem; }
     .modal-btn-confirm { background: #ff1744; color: #fff; }
     .modal-btn-cancel { background: #444; color: #fff; }
-  </style>
